@@ -186,12 +186,18 @@ PAGE_SIZE = 24
 def _build_profile_query(db, q, gender, location, province, nationality, language,
                           ad_category, ad_location, with_phone, with_photo,
                           show_archived=False, archived_only=False,
-                          run_id="", run_filter=""):
+                          run_id="", run_filter="",
+                          contacted_only=False, visited_only=False,
+                          service=""):
     query = db.query(Profile).filter(Profile.is_active == True)
     if archived_only:
         query = query.filter(Profile.is_archived == True)
     elif not show_archived:
         query = query.filter(Profile.is_archived != True)
+    if contacted_only:
+        query = query.filter(Profile.is_contacted == True)
+    if visited_only:
+        query = query.filter(Profile.is_visited == True)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -211,6 +217,8 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
         query = query.filter(Profile.extra_data.ilike(f'%"nationality": "{nationality}"%'))
     if language:
         query = query.filter(Profile.extra_data.ilike(f'%"languages": "%{language}%"'))
+    if service:
+        query = query.filter(Profile.extra_data.ilike(f'%"{service}"%'))
     if ad_category:
         query = query.filter(
             exists().where(
@@ -249,11 +257,15 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
     return query
 
 
-def _dropdown_values(db, archived_only=False):
-    """Return distinct filter dropdown values, optionally scoped to archived profiles."""
+def _dropdown_values(db, archived_only=False, contacted_only=False, visited_only=False):
+    """Return distinct filter dropdown values."""
     base_filter = [Profile.is_active == True]
     if archived_only:
         base_filter.append(Profile.is_archived == True)
+    if contacted_only:
+        base_filter.append(Profile.is_contacted == True)
+    if visited_only:
+        base_filter.append(Profile.is_visited == True)
 
     distinct_locations = [
         row[0]
@@ -271,6 +283,7 @@ def _dropdown_values(db, archived_only=False):
 
     _nationalities: set[str] = set()
     _languages: set[str] = set()
+    _services: set[str] = set()
     for (ed,) in (
         db.query(Profile.extra_data)
         .filter(*base_filter, Profile.extra_data.isnot(None), Profile.extra_data != "")
@@ -286,6 +299,11 @@ def _dropdown_values(db, archived_only=False):
                     _languages.update(l.strip() for l in langs if l.strip())
                 else:
                     _languages.update(l.strip() for l in str(langs).split(",") if l.strip())
+            svcs = d.get("services", {})
+            if isinstance(svcs, dict):
+                for items in svcs.values():
+                    if isinstance(items, list):
+                        _services.update(i.strip() for i in items if i.strip())
         except Exception:
             pass
 
@@ -294,6 +312,7 @@ def _dropdown_values(db, archived_only=False):
         "distinct_provinces": distinct_provinces,
         "distinct_nationalities": sorted(_nationalities),
         "distinct_languages": sorted(_languages),
+        "distinct_services": sorted(_services),
     }
 
 
@@ -312,6 +331,7 @@ async def profile_list(
     with_phone: int = Query(0),
     with_photo: int = Query(0),
     show_archived: int = Query(0),
+    service: str = Query(""),
     run_id: str = Query(""),
     run_filter: str = Query(""),
     db: Session = Depends(get_db),
@@ -322,7 +342,6 @@ async def profile_list(
 
     dropdowns = _dropdown_values(db)
 
-    # Distinct ad locations (active ads only)
     distinct_ad_locations = [
         row[0]
         for row in db.query(Advertisement.location)
@@ -348,6 +367,7 @@ async def profile_list(
         db, q, gender, location, province, nationality, language,
         ad_category, ad_location, with_phone, with_photo,
         show_archived=bool(show_archived),
+        service=service,
         run_id=run_id, run_filter=run_filter,
     )
     total = query.count()
@@ -361,7 +381,7 @@ async def profile_list(
     filters_active = bool(
         gender or location or province or nationality or language
         or ad_category or ad_location
-        or with_phone or with_photo or show_archived
+        or with_phone or with_photo or show_archived or service
     )
 
     return templates.TemplateResponse(
@@ -384,8 +404,11 @@ async def profile_list(
             "with_phone": with_phone,
             "with_photo": with_photo,
             "show_archived": show_archived,
+            "service": service,
             "filters_active": filters_active,
             "archive_view": False,
+            "contacted_view": False,
+            "visited_view": False,
             "run_id": run_id,
             "run_filter": run_filter,
             "run_context": run_context,
@@ -408,6 +431,7 @@ async def archived_list(
     province: str = Query(""),
     with_phone: int = Query(0),
     with_photo: int = Query(0),
+    service: str = Query(""),
     db: Session = Depends(get_db),
     user=Depends(require_login),
 ):
@@ -418,7 +442,7 @@ async def archived_list(
 
     query = _build_profile_query(
         db, q, gender, location, province, nationality, language,
-        "", "", with_phone, with_photo, archived_only=True,
+        "", "", with_phone, with_photo, archived_only=True, service=service,
     )
     total = query.count()
     profiles = (
@@ -430,7 +454,7 @@ async def archived_list(
     total_pages = math.ceil(total / PAGE_SIZE) if total else 1
     filters_active = bool(
         gender or location or province or nationality or language
-        or with_phone or with_photo
+        or with_phone or with_photo or service
     )
 
     return templates.TemplateResponse(
@@ -453,8 +477,157 @@ async def archived_list(
             "with_phone": with_phone,
             "with_photo": with_photo,
             "show_archived": 0,
+            "service": service,
             "filters_active": filters_active,
             "archive_view": True,
+            "contacted_view": False,
+            "visited_view": False,
+            "run_id": "",
+            "run_filter": "",
+            "run_context": None,
+            **dropdowns,
+            "distinct_ad_categories": [],
+            "distinct_ad_locations": [],
+        },
+    )
+
+
+@router.get("/gecontacteerd", response_class=HTMLResponse)
+async def contacted_list(
+    request: Request,
+    page: int = Query(1, ge=1),
+    q: str = Query(""),
+    gender: str = Query(""),
+    location: str = Query(""),
+    nationality: str = Query(""),
+    language: str = Query(""),
+    province: str = Query(""),
+    with_phone: int = Query(0),
+    with_photo: int = Query(0),
+    service: str = Query(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    dropdowns = _dropdown_values(db, contacted_only=True)
+
+    query = _build_profile_query(
+        db, q, gender, location, province, nationality, language,
+        "", "", with_phone, with_photo, contacted_only=True, service=service,
+    )
+    total = query.count()
+    profiles = (
+        query.order_by(Profile.last_scraped.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    total_pages = math.ceil(total / PAGE_SIZE) if total else 1
+    filters_active = bool(
+        gender or location or province or nationality or language
+        or with_phone or with_photo or service
+    )
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "profiles": profiles,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "page_size": PAGE_SIZE,
+            "q": q,
+            "gender": gender,
+            "location": location,
+            "province": province,
+            "nationality": nationality,
+            "language": language,
+            "ad_category": "",
+            "ad_location": "",
+            "with_phone": with_phone,
+            "with_photo": with_photo,
+            "show_archived": 0,
+            "service": service,
+            "filters_active": filters_active,
+            "archive_view": False,
+            "contacted_view": True,
+            "visited_view": False,
+            "run_id": "",
+            "run_filter": "",
+            "run_context": None,
+            **dropdowns,
+            "distinct_ad_categories": [],
+            "distinct_ad_locations": [],
+        },
+    )
+
+
+@router.get("/bezocht", response_class=HTMLResponse)
+async def visited_list(
+    request: Request,
+    page: int = Query(1, ge=1),
+    q: str = Query(""),
+    gender: str = Query(""),
+    location: str = Query(""),
+    nationality: str = Query(""),
+    language: str = Query(""),
+    province: str = Query(""),
+    with_phone: int = Query(0),
+    with_photo: int = Query(0),
+    service: str = Query(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    dropdowns = _dropdown_values(db, visited_only=True)
+
+    query = _build_profile_query(
+        db, q, gender, location, province, nationality, language,
+        "", "", with_phone, with_photo, visited_only=True, service=service,
+    )
+    total = query.count()
+    profiles = (
+        query.order_by(Profile.last_scraped.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    total_pages = math.ceil(total / PAGE_SIZE) if total else 1
+    filters_active = bool(
+        gender or location or province or nationality or language
+        or with_phone or with_photo or service
+    )
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "profiles": profiles,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "page_size": PAGE_SIZE,
+            "q": q,
+            "gender": gender,
+            "location": location,
+            "province": province,
+            "nationality": nationality,
+            "language": language,
+            "ad_category": "",
+            "ad_location": "",
+            "with_phone": with_phone,
+            "with_photo": with_photo,
+            "show_archived": 0,
+            "service": service,
+            "filters_active": filters_active,
+            "archive_view": False,
+            "contacted_view": False,
+            "visited_view": True,
             "run_id": "",
             "run_filter": "",
             "run_context": None,
@@ -481,6 +654,9 @@ async def profiles_more(
     with_photo: int = Query(0),
     show_archived: int = Query(0),
     archived_only: int = Query(0),
+    contacted_only: int = Query(0),
+    visited_only: int = Query(0),
+    service: str = Query(""),
     run_id: str = Query(""),
     run_filter: str = Query(""),
     db: Session = Depends(get_db),
@@ -493,6 +669,8 @@ async def profiles_more(
         db, q, gender, location, province, nationality, language,
         ad_category, ad_location, with_phone, with_photo,
         show_archived=bool(show_archived), archived_only=bool(archived_only),
+        contacted_only=bool(contacted_only), visited_only=bool(visited_only),
+        service=service,
         run_id=run_id, run_filter=run_filter,
     )
     total = query.count()
@@ -596,6 +774,64 @@ async def delete_profile(
     db.delete(profile)
     db.commit()
     return JSONResponse({"deleted": True})
+
+
+@router.post("/profile/{profile_id}/contact")
+async def set_contact_status(
+    profile_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    body = await request.json()
+    set_val = bool(body.get("set", False))
+    profile.is_contacted = set_val
+    if set_val:
+        date_str = body.get("date", "")
+        try:
+            profile.contacted_at = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.utcnow()
+        except ValueError:
+            profile.contacted_at = datetime.utcnow()
+        profile.contacted_note = body.get("note", "") or ""
+    else:
+        profile.contacted_at = None
+        profile.contacted_note = None
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/profile/{profile_id}/visit")
+async def set_visit_status(
+    profile_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    body = await request.json()
+    set_val = bool(body.get("set", False))
+    profile.is_visited = set_val
+    if set_val:
+        date_str = body.get("date", "")
+        try:
+            profile.visited_at = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.utcnow()
+        except ValueError:
+            profile.visited_at = datetime.utcnow()
+        profile.visited_note = body.get("note", "") or ""
+    else:
+        profile.visited_at = None
+        profile.visited_note = None
+    db.commit()
+    return JSONResponse({"ok": True})
 
 
 @router.post("/profiles/bulk-delete")

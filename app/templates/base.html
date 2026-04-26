@@ -33,6 +33,16 @@
       Archief
     </a>
 
+    <a href="/gecontacteerd" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/gecontacteerd' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Gecontacteerd
+    </a>
+
+    <a href="/bezocht" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/bezocht' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Bezocht
+    </a>
+
     <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
        {% if path == '/status' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
       Status

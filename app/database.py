@@ -59,6 +59,12 @@ def init_db():
     _migrate(text("ALTER TABLE scrape_runs ADD COLUMN profiles_processed INTEGER DEFAULT 0"))
     _migrate(text("ALTER TABLE advertisements ADD COLUMN description TEXT"))
     _migrate(text("ALTER TABLE advertisements ADD COLUMN published_at DATETIME"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN is_contacted BOOLEAN DEFAULT 0"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN contacted_at DATETIME"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN contacted_note TEXT"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN is_visited BOOLEAN DEFAULT 0"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN visited_at DATETIME"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN visited_note TEXT"))
 
 
 def _migrate(stmt):

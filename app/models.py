@@ -37,6 +37,12 @@ class Profile(Base):
     first_seen   = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_scraped = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_changed = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_contacted   = Column(Boolean, default=False)
+    contacted_at   = Column(DateTime, nullable=True)
+    contacted_note = Column(Text, nullable=True)
+    is_visited     = Column(Boolean, default=False)
+    visited_at     = Column(DateTime, nullable=True)
+    visited_note   = Column(Text, nullable=True)
 
     photos = relationship(
         "Photo",

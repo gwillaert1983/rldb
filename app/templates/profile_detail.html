@@ -237,20 +237,83 @@
       <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Info</h2>
       <div class="flex gap-2 text-xs">
         <span class="text-gray-500 w-28 shrink-0">Eerste keer gezien</span>
-        <span class="text-gray-400">{{ profile.first_seen.strftime('%d/%m/%Y %H:%M') if profile.first_seen else '—' }}</span>
+        <span class="text-gray-400">{{ profile.first_seen | to_local if profile.first_seen else '—' }}</span>
       </div>
       <div class="flex gap-2 text-xs">
         <span class="text-gray-500 w-28 shrink-0">Laatst gescraped</span>
-        <span class="text-gray-400">{{ profile.last_scraped.strftime('%d/%m/%Y %H:%M') if profile.last_scraped else '—' }}</span>
+        <span class="text-gray-400">{{ profile.last_scraped | to_local if profile.last_scraped else '—' }}</span>
       </div>
       <div class="flex gap-2 text-xs">
         <span class="text-gray-500 w-28 shrink-0">Laatste wijziging</span>
-        <span class="text-gray-400">{{ profile.last_changed.strftime('%d/%m/%Y %H:%M') if profile.last_changed else '—' }}</span>
+        <span class="text-gray-400">{{ profile.last_changed | to_local if profile.last_changed else '—' }}</span>
       </div>
       <div class="flex gap-2 text-xs pt-1">
         <span class="text-gray-500 w-28 shrink-0">Bron</span>
         <a href="{{ profile.source_url }}" target="_blank"
            class="text-blue-500 hover:text-blue-400 truncate transition">Bekijk profiel</a>
+      </div>
+    </div>
+
+    <!-- Mijn notities -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Mijn notities</h2>
+
+      <!-- Gecontacteerd -->
+      <div class="mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="btn-contacted" onclick="toggleStatus('contacted')"
+                  class="text-xs border rounded px-2 py-1 transition
+                         {% if profile.is_contacted %}border-green-700 text-green-400 hover:border-green-500{% else %}border-gray-700 text-gray-500 hover:text-green-400 hover:border-green-700{% endif %}">
+            {% if profile.is_contacted %}✓ Gecontacteerd{% else %}Gecontacteerd{% endif %}
+          </button>
+          {% if profile.is_contacted and profile.contacted_at %}
+          <span class="text-xs text-gray-500">{{ profile.contacted_at | to_local('%d/%m/%Y') }}</span>
+          {% endif %}
+        </div>
+        {% if profile.is_contacted and profile.contacted_note %}
+        <div class="text-xs text-gray-400 bg-gray-800/60 rounded p-2 whitespace-pre-line mb-2">{{ profile.contacted_note }}</div>
+        {% endif %}
+        <div id="form-contacted" class="hidden mt-1 space-y-2">
+          <input type="date" id="date-contacted"
+                 class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:ring-1 focus:ring-blue-500">
+          <textarea id="note-contacted" rows="3" placeholder="Notitie…"
+                    class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"></textarea>
+          <div class="flex gap-2">
+            <button onclick="saveStatus('contacted')"
+                    class="bg-green-800 hover:bg-green-700 text-white text-xs px-3 py-1 rounded transition">Opslaan</button>
+            <button onclick="hideForm('contacted')"
+                    class="text-gray-500 hover:text-gray-300 text-xs transition">Annuleren</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bezocht -->
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <button id="btn-visited" onclick="toggleStatus('visited')"
+                  class="text-xs border rounded px-2 py-1 transition
+                         {% if profile.is_visited %}border-purple-700 text-purple-400 hover:border-purple-500{% else %}border-gray-700 text-gray-500 hover:text-purple-400 hover:border-purple-700{% endif %}">
+            {% if profile.is_visited %}✓ Bezocht{% else %}Bezocht{% endif %}
+          </button>
+          {% if profile.is_visited and profile.visited_at %}
+          <span class="text-xs text-gray-500">{{ profile.visited_at | to_local('%d/%m/%Y') }}</span>
+          {% endif %}
+        </div>
+        {% if profile.is_visited and profile.visited_note %}
+        <div class="text-xs text-gray-400 bg-gray-800/60 rounded p-2 whitespace-pre-line mb-2">{{ profile.visited_note }}</div>
+        {% endif %}
+        <div id="form-visited" class="hidden mt-1 space-y-2">
+          <input type="date" id="date-visited"
+                 class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:ring-1 focus:ring-blue-500">
+          <textarea id="note-visited" rows="3" placeholder="Notitie…"
+                    class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"></textarea>
+          <div class="flex gap-2">
+            <button onclick="saveStatus('visited')"
+                    class="bg-purple-800 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded transition">Opslaan</button>
+            <button onclick="hideForm('visited')"
+                    class="text-gray-500 hover:text-gray-300 text-xs transition">Annuleren</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -361,6 +424,43 @@ function closeAdModal() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeAdModal();
 });
+</script>
+
+<script>
+const _profileId = '{{ profile.id }}';
+const _statusState = {
+  contacted: {{ 'true' if profile.is_contacted else 'false' }},
+  visited:   {{ 'true' if profile.is_visited else 'false' }},
+};
+
+function toggleStatus(type) {
+  if (_statusState[type]) {
+    if (!confirm('Status wissen?')) return;
+    saveStatus(type, false);
+  } else {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('date-' + type).value = today;
+    document.getElementById('note-' + type).value = '';
+    document.getElementById('form-' + type).classList.remove('hidden');
+  }
+}
+
+function hideForm(type) {
+  document.getElementById('form-' + type).classList.add('hidden');
+}
+
+async function saveStatus(type, set) {
+  if (set === undefined) set = true;
+  const date = set ? document.getElementById('date-' + type).value : null;
+  const note = set ? document.getElementById('note-' + type).value : null;
+  const endpoint = type === 'contacted' ? 'contact' : 'visit';
+  const resp = await fetch('/profile/' + _profileId + '/' + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ set, date, note }),
+  });
+  if (resp.ok) location.reload();
+}
 </script>
 
 <script>

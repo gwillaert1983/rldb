@@ -1,7 +1,8 @@
 {% for profile in profiles %}
-<a href="/profile/{{ profile.id }}"
-   id="card-{{ profile.id }}"
-   class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition">
+{% set ex = profile.extra_data | from_json %}
+<div id="card-{{ profile.id }}"
+     class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition cursor-pointer"
+     onclick="if(!event.defaultPrevented) location.href='/profile/{{ profile.id }}'">
   {% if profile.photos %}
   <div class="aspect-[3/4] overflow-hidden bg-gray-800">
     <img src="{{ profile.photos[0].thumbnail_r2_url }}"
@@ -18,7 +19,6 @@
     <div class="font-medium text-xs text-white truncate leading-snug">
       {{ profile.display_name or profile.username or '—' }}
     </div>
-    {% set ex = profile.extra_data | from_json %}
     <div class="text-xs text-gray-500 truncate mt-0.5 leading-snug">
       {{ ex.get('age', '') }}{% if ex.get('age') and ex.get('nationality') %} · {% endif %}{{ ex.get('nationality', '') }}
     </div>
@@ -27,26 +27,16 @@
     {% endif %}
   </div>
   {% if profile.is_archived %}
-  <label onclick="event.stopPropagation()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
+  <label onclick="event.preventDefault()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
     <input type="checkbox" class="profile-checkbox w-4 h-4 accent-blue-500 cursor-pointer"
            data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
   </label>
-  <div class="absolute top-1.5 right-1.5 flex gap-1">
-    <button onclick="restoreProfile(event, '{{ profile.id }}')"
-            class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
-                   text-blue-400 hover:text-blue-300 text-xs leading-none transition"
-            title="Herstellen">↩</button>
-    <button onclick="deleteProfile(event, '{{ profile.id }}')"
-            class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
-                   text-gray-500 hover:text-red-400 text-xs leading-none transition"
-            title="Verwijderen">🗑</button>
-  </div>
   {% else %}
-  <button onclick="archiveProfile(event, '{{ profile.id }}')"
+  <button onclick="event.preventDefault(); archiveProfile('{{ profile.id }}')"
           class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                  bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
                  text-gray-500 hover:text-orange-400 text-xs leading-none"
           title="Archiveren">✕</button>
   {% endif %}
-</a>
+</div>
 {% endfor %}

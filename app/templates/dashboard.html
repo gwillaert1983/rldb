@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if archive_view %}Archief{% else %}Profielen{% endif %} — RLDB{% endblock %}
+{% block title %}{% if archive_view %}Archief{% elif contacted_view %}Gecontacteerd{% elif visited_view %}Bezocht{% else %}Profielen{% endif %} — RLDB{% endblock %}
 {% block content %}
 
 <div class="flex gap-5 items-start">
@@ -8,10 +8,14 @@
        SIDEBAR — zoek + filters
   ══════════════════════════════════════════ -->
   <aside class="w-52 shrink-0 sticky top-5">
-    <form id="filter-form" method="get" action="{% if archive_view %}/archived{% else %}/{% endif %}">
+    <form id="filter-form" method="get" action="{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% else %}/{% endif %}">
       <input type="hidden" name="page" value="1">
       {% if archive_view %}
       <input type="hidden" name="archived_only" value="1">
+      {% elif contacted_view %}
+      <input type="hidden" name="contacted_only" value="1">
+      {% elif visited_view %}
+      <input type="hidden" name="visited_only" value="1">
       {% endif %}
       {% if run_id is defined and run_id %}
       <input type="hidden" name="run_id" value="{{ run_id }}">
@@ -97,8 +101,22 @@
           </select>
         </div>
 
-        <!-- Advertentie filters (niet op archiefpagina) -->
-        {% if not archive_view %}
+        <!-- Dienst / mogelijkheid -->
+        {% if distinct_services %}
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Dienst / mogelijkheid</label>
+          <select name="service" id="inp-service"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for svc in distinct_services %}
+            <option value="{{ svc }}" {{ 'selected' if service == svc }}>{{ svc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Advertentie filters (niet op archief/contacted/visited pagina) -->
+        {% if not archive_view and not contacted_view and not visited_view %}
         {% if distinct_ad_categories %}
         <div>
           <label class="block text-xs text-gray-500 mb-1">Advertentie type</label>
@@ -140,14 +158,6 @@
                    class="rounded accent-blue-500">
             Heeft foto's
           </label>
-          {% if not archive_view %}
-          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-            <input type="checkbox" name="show_archived" value="1" id="inp-archived"
-                   {{ 'checked' if show_archived }}
-                   class="rounded accent-blue-500">
-            Toon gearchiveerd
-          </label>
-          {% endif %}
         </div>
 
         <!-- Knoppen -->
@@ -178,10 +188,14 @@
       <span class="text-gray-500 text-sm flex items-center gap-3">
         {% if archive_view %}
         Archief — {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% elif contacted_view %}
+        Gecontacteerd — {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% elif visited_view %}
+        Bezocht — {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% else %}
         {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% endif %}
-        {% if archive_view and total %}
+        {% if (archive_view or contacted_view or visited_view) and total %}
         <button onclick="selectAllVisible()" class="text-xs text-gray-600 hover:text-blue-400 transition">
           Alles selecteren
         </button>
@@ -214,9 +228,10 @@
     <!-- ── Rasterweergave ── -->
     <div id="view-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
       {% for profile in profiles %}
-      <a href="/profile/{{ profile.id }}"
-         id="card-{{ profile.id }}"
-         class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition">
+      {% set ex = profile.extra_data | from_json %}
+      <div id="card-{{ profile.id }}"
+           class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition cursor-pointer"
+           onclick="if(!event.defaultPrevented) location.href='/profile/{{ profile.id }}'">
         {% if profile.photos %}
         <div class="aspect-[3/4] overflow-hidden bg-gray-800">
           <img src="{{ profile.photos[0].thumbnail_r2_url }}"
@@ -233,7 +248,6 @@
           <div class="font-medium text-xs text-white truncate leading-snug">
             {{ profile.display_name or profile.username or '—' }}
           </div>
-          {% set ex = profile.extra_data | from_json %}
           <div class="text-xs text-gray-500 truncate mt-0.5 leading-snug">
             {{ ex.get('age', '') }}{% if ex.get('age') and ex.get('nationality') %} · {% endif %}{{ ex.get('nationality', '') }}
           </div>
@@ -242,28 +256,18 @@
           {% endif %}
         </div>
         {% if profile.is_archived %}
-        <label onclick="event.stopPropagation()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
+        <label onclick="event.preventDefault()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
           <input type="checkbox" class="profile-checkbox w-4 h-4 accent-blue-500 cursor-pointer"
                  data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
         </label>
-        <div class="absolute top-1.5 right-1.5 flex gap-1">
-          <button onclick="restoreProfile(event, '{{ profile.id }}')"
-                  class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
-                         text-blue-400 hover:text-blue-300 text-xs leading-none transition"
-                  title="Herstellen">↩</button>
-          <button onclick="deleteProfile(event, '{{ profile.id }}')"
-                  class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
-                         text-gray-500 hover:text-red-400 text-xs leading-none transition"
-                  title="Verwijderen">🗑</button>
-        </div>
         {% else %}
-        <button onclick="archiveProfile(event, '{{ profile.id }}')"
+        <button onclick="event.preventDefault(); archiveProfile('{{ profile.id }}')"
                 class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                        bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
                        text-gray-500 hover:text-orange-400 text-xs leading-none"
                 title="Archiveren">✕</button>
         {% endif %}
-      </a>
+      </div>
       {% endfor %}
     </div>
 
@@ -310,16 +314,10 @@
               </td>
               <td class="px-2 py-2 text-center" onclick="event.stopPropagation()">
                 {% if profile.is_archived %}
-                <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer mr-1"
+                <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer"
                        data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
-                <button onclick="restoreProfile(event, '{{ profile.id }}')"
-                        class="text-blue-500 hover:text-blue-400 transition text-sm leading-none mr-0.5"
-                        title="Herstellen">↩</button>
-                <button onclick="deleteProfile(event, '{{ profile.id }}')"
-                        class="text-gray-600 hover:text-red-400 transition text-sm leading-none"
-                        title="Verwijderen">🗑</button>
                 {% else %}
-                <button onclick="archiveProfile(event, '{{ profile.id }}')"
+                <button onclick="archiveProfile('{{ profile.id }}')"
                         class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
                         title="Archiveren">✕</button>
                 {% endif %}
@@ -341,6 +339,10 @@
       </button>
       {% elif archive_view %}
       <p class="text-base">Geen gearchiveerde profielen</p>
+      {% elif contacted_view %}
+      <p class="text-base">Nog geen gecontacteerde profielen</p>
+      {% elif visited_view %}
+      <p class="text-base">Nog geen bezochte profielen</p>
       {% else %}
       <p class="text-base">Nog geen profielen beschikbaar</p>
       <p class="text-sm mt-2 text-gray-700">Wacht op de eerste scrape-run of controleer de status.</p>
@@ -408,23 +410,17 @@ function _removeCard(profileId) {
   }
 }
 
-async function archiveProfile(event, profileId) {
-  event.preventDefault();
-  event.stopPropagation();
+async function archiveProfile(profileId) {
   const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
   if (resp.ok) _removeCard(profileId);
 }
 
-async function restoreProfile(event, profileId) {
-  event.preventDefault();
-  event.stopPropagation();
+async function restoreProfile(profileId) {
   const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
   if (resp.ok) _removeCard(profileId);
 }
 
-async function deleteProfile(event, profileId) {
-  event.preventDefault();
-  event.stopPropagation();
+async function deleteProfile(profileId) {
   const resp = await fetch('/profile/' + profileId + '/delete', { method: 'POST' });
   if (resp.ok) _removeCard(profileId);
 }
@@ -494,10 +490,10 @@ async function restoreSelected() {
 
 // --- Filter wissen ---
 function clearFilters() {
-  {% if not archive_view %}
+  {% if not archive_view and not contacted_view and not visited_view %}
   localStorage.removeItem('dashboardFilters');
   {% endif %}
-  location.href = '{% if archive_view %}/archived{% else %}/{% endif %}';
+  location.href = '{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% else %}/{% endif %}';
 }
 
 // --- Unified fetch (instant filter + infinite scroll) ---
@@ -512,7 +508,7 @@ function _currentParams(page) {
   const p = new URLSearchParams(fd);
   p.set('page', page);
   // Unchecked checkboxes aren't in FormData — explicitly set to 0
-  ['with_phone', 'with_photo', 'show_archived'].forEach(k => {
+  ['with_phone', 'with_photo'].forEach(k => {
     if (!p.has(k)) p.set(k, '0');
   });
   return p;
@@ -572,7 +568,7 @@ new IntersectionObserver(entries => {
   }
 }, { root: _mainEl, rootMargin: '200px' }).observe(document.getElementById('scroll-sentinel'));
 
-{% if not archive_view %}
+{% if not archive_view and not contacted_view and not visited_view %}
 // --- Filter persistentie (alleen op hoofdpagina) ---
 const FILTER_KEY = 'dashboardFilters';
 
@@ -586,17 +582,17 @@ document.getElementById('filter-form').addEventListener('submit', () => {
     location: val('inp-location'),
     nationality: val('inp-nationality'),
     language: val('inp-language'),
+    service: val('inp-service'),
     ad_category: val('inp-ad-category'),
     ad_location: val('inp-ad-location'),
     with_phone: chk('inp-phone'),
     with_photo: chk('inp-photo'),
-    show_archived: chk('inp-archived'),
   }));
 });
 
 // Auto-redirect op kale /
 const urlParams = new URLSearchParams(window.location.search);
-const filterKeys = ['q', 'gender', 'province', 'location', 'nationality', 'language', 'ad_category', 'ad_location', 'with_phone', 'with_photo', 'show_archived'];
+const filterKeys = ['q', 'gender', 'province', 'location', 'nationality', 'language', 'service', 'ad_category', 'ad_location', 'with_phone', 'with_photo'];
 const hasUrlFilters = filterKeys.some(k => urlParams.has(k) && urlParams.get(k));
 const hasActive = {{ 'true' if (filters_active or q) else 'false' }};
 
@@ -611,11 +607,11 @@ if (!hasUrlFilters && !hasActive) {
       if (saved.location) p.set('location', saved.location);
       if (saved.nationality) p.set('nationality', saved.nationality);
       if (saved.language) p.set('language', saved.language);
+      if (saved.service) p.set('service', saved.service);
       if (saved.ad_category) p.set('ad_category', saved.ad_category);
       if (saved.ad_location) p.set('ad_location', saved.ad_location);
       if (saved.with_phone) p.set('with_phone', '1');
       if (saved.with_photo) p.set('with_photo', '1');
-      if (saved.show_archived) p.set('show_archived', '1');
       const qs = p.toString();
       if (qs) location.replace('/?' + qs);
     }
