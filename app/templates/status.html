@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Status — RLDB{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-5">
+  <h1 class="text-lg font-semibold text-white">Status</h1>
+  <div class="flex gap-2">
+    <button id="scrape-btn"
+      onclick="startScrape()"
+      {% if is_running %}disabled{% endif %}
+      class="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-1.5 rounded-lg text-sm font-medium transition">
+      {% if is_running %}Bezig…{% else %}Nu scrapen{% endif %}
+    </button>
+    <button id="stop-btn"
+      onclick="stopScrape()"
+      {% if not is_running %}style="display:none"{% endif %}
+      class="bg-red-900/60 hover:bg-red-800 border border-red-800 text-red-300 px-4 py-1.5 rounded-lg text-sm font-medium transition">
+      Stoppen
+    </button>
+  </div>
+</div>
+
+<!-- Voortgangsbalk (alleen zichtbaar tijdens actieve scrape) -->
+<div id="progress-section" class="{{ '' if is_running else 'hidden' }} mb-5">
+  {% set found = last_run.profiles_found if last_run and last_run.profiles_found else 0 %}
+  {% set processed = last_run.profiles_processed if last_run and last_run.profiles_processed else 0 %}
+  {% set pct = ([((processed / found * 100)|int), 100]|min) if found > 0 else 0 %}
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+      <span class="flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"></span>
+        Scrape actief
+      </span>
+      <span id="progress-text">{{ processed }} / {{ found }}</span>
+    </div>
+    <div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div id="progress-bar"
+           class="h-full bg-blue-500 rounded-full transition-all duration-500"
+           style="width: {{ pct }}%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Statistieken -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white" id="stat-profiles">{{ total_profiles }}</div>
+    <div class="text-gray-500 text-xs mt-1">Profielen</div>
+  </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white" id="stat-photos">{{ total_photos }}</div>
+    <div class="text-gray-500 text-xs mt-1">Foto's</div>
+  </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white" id="stat-runs">{{ recent_runs|length }}</div>
+    <div class="text-gray-500 text-xs mt-1">Scrape runs</div>
+  </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4" id="stat-lastrun-card">
+    {% if last_run %}
+    <div class="text-sm font-semibold
+      {{ 'text-green-400' if last_run.status.value == 'completed' else
+         'text-red-400' if last_run.status.value == 'failed' else
+         'text-orange-400' if last_run.status.value == 'stopped' else 'text-yellow-400' }}"
+         id="stat-lastrun-status">
+      {{ last_run.status.value }}
+    </div>
+    <div class="text-gray-500 text-xs mt-1">Laatste run</div>
+    <div class="text-gray-600 text-xs mt-0.5" id="stat-lastrun-time">
+      {{ last_run.started_at.strftime('%d/%m %H:%M') }}
+    </div>
+    {% else %}
+    <div class="text-gray-600 text-sm" id="stat-lastrun-status">—</div>
+    <div class="text-gray-500 text-xs mt-1">Laatste run</div>
+    <div id="stat-lastrun-time"></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Run geschiedenis -->
+<h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recente runs</h2>
+<div id="runs-table-wrapper">
+{% if recent_runs %}
+<div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+  <table class="w-full text-sm" id="runs-table">
+    <thead>
+      <tr class="border-b border-gray-800">
+        <th class="text-left text-xs text-gray-500 font-normal px-4 py-3">Gestart</th>
+        <th class="text-left text-xs text-gray-500 font-normal px-4 py-3">Status</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Gevonden</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Nieuw</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Geüpdated</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Foto's</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-4 py-3">Duur</th>
+      </tr>
+    </thead>
+    <tbody id="runs-tbody">
+      {% for run in recent_runs %}
+      <tr class="border-b border-gray-800/50 hover:bg-gray-800/20 transition" id="run-{{ run.id }}">
+        <td class="px-4 py-2.5 text-gray-300 text-sm">{{ run.started_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="px-4 py-2.5">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {{ 'bg-green-900/40 text-green-400' if run.status.value == 'completed' else
+               'bg-red-900/40 text-red-400' if run.status.value == 'failed' else
+               'bg-orange-900/40 text-orange-400' if run.status.value == 'stopped' else
+               'bg-yellow-900/40 text-yellow-400' }}">
+            {{ run.status.value }}
+          </span>
+        </td>
+        <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.profiles_found or 0 }}</td>
+        <td class="px-3 py-2.5 text-right text-green-400 text-sm">{{ run.profiles_new or 0 }}</td>
+        <td class="px-3 py-2.5 text-right text-blue-400 text-sm">{{ run.profiles_updated or 0 }}</td>
+        <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.photos_downloaded or 0 }}</td>
+        <td class="px-4 py-2.5 text-right text-gray-500 text-xs">
+          {% if run.finished_at %}
+            {% set d = (run.finished_at - run.started_at).seconds %}
+            {{ (d // 60) ~ 'm ' ~ (d % 60) ~ 's' if d >= 60 else d ~ 's' }}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% if run.error_message %}
+      <tr class="bg-red-950/20">
+        <td colspan="7" class="px-4 py-2 text-xs text-red-400 font-mono">{{ run.error_message }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-12 text-gray-600" id="no-runs-msg">
+  Nog geen scrape runs uitgevoerd.
+</div>
+{% endif %}
+</div>
+
+<script>
+const POLL_RUNNING = 5000;
+const POLL_IDLE    = 30000;
+let wasRunning = {{ 'true' if is_running else 'false' }};
+let pollTimer  = null;
+
+function statusColor(s) {
+  return s === 'completed' ? 'text-green-400' :
+         s === 'failed'    ? 'text-red-400' :
+         s === 'stopped'   ? 'text-orange-400' : 'text-yellow-400';
+}
+function badgeClass(s) {
+  return s === 'completed' ? 'bg-green-900/40 text-green-400' :
+         s === 'failed'    ? 'bg-red-900/40 text-red-400' :
+         s === 'stopped'   ? 'bg-orange-900/40 text-orange-400' :
+                             'bg-yellow-900/40 text-yellow-400';
+}
+
+async function poll() {
+  try {
+    const resp = await fetch('/status/data');
+    if (!resp.ok) { pollTimer = setTimeout(poll, POLL_IDLE); return; }
+    const d = await resp.json();
+
+    // Stats
+    document.getElementById('stat-profiles').textContent = d.total_profiles;
+    document.getElementById('stat-photos').textContent   = d.total_photos;
+    document.getElementById('stat-runs').textContent     = d.runs_count;
+
+    // Laatste run kaart
+    if (d.last_run) {
+      const el = document.getElementById('stat-lastrun-status');
+      el.textContent = d.last_run.status;
+      el.className = 'text-sm font-semibold ' + statusColor(d.last_run.status);
+      document.getElementById('stat-lastrun-time').textContent = d.last_run.started_at;
+    }
+
+    // Knoppen
+    const startBtn = document.getElementById('scrape-btn');
+    const stopBtn  = document.getElementById('stop-btn');
+    startBtn.disabled = d.is_running;
+    startBtn.textContent = d.is_running ? 'Bezig…' : 'Nu scrapen';
+    stopBtn.style.display = d.is_running ? '' : 'none';
+
+    // Voortgangsbalk
+    const progSection = document.getElementById('progress-section');
+    progSection.classList.toggle('hidden', !d.is_running);
+    if (d.is_running && d.last_run) {
+      const found = d.last_run.profiles_found || 0;
+      const processed = d.last_run.profiles_processed || 0;
+      document.getElementById('progress-text').textContent = processed + ' / ' + found;
+      const pct = found > 0 ? Math.min(Math.round(processed / found * 100), 100) : 0;
+      document.getElementById('progress-bar').style.width = pct + '%';
+    }
+
+    // Live rij update tijdens run
+    if (d.last_run && d.last_run.status === 'running' && d.recent_runs.length) {
+      const r = d.recent_runs[0];
+      const row = document.getElementById('run-' + r.id);
+      if (row) {
+        row.cells[2].textContent = r.profiles_found;
+        row.cells[3].textContent = r.profiles_new;
+        row.cells[4].textContent = r.profiles_updated;
+        row.cells[5].textContent = r.photos_downloaded;
+      }
+    }
+
+    // Pagina herladen als run net klaar is
+    if (wasRunning && !d.is_running) { location.reload(); return; }
+    wasRunning = d.is_running;
+  } catch(e) {}
+
+  pollTimer = setTimeout(poll, wasRunning ? POLL_RUNNING : POLL_IDLE);
+}
+
+async function startScrape() {
+  document.getElementById('scrape-btn').disabled = true;
+  document.getElementById('scrape-btn').textContent = 'Starten…';
+  await fetch('/scrape/start', { method: 'POST' });
+  wasRunning = true;
+  clearTimeout(pollTimer);
+  poll();
+}
+
+async function stopScrape() {
+  const btn = document.getElementById('stop-btn');
+  btn.disabled = true;
+  btn.textContent = 'Stoppen…';
+  await fetch('/scrape/stop', { method: 'POST' });
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, 2000);
+}
+
+pollTimer = setTimeout(poll, wasRunning ? POLL_RUNNING : POLL_IDLE);
+</script>
+
+{% endblock %}

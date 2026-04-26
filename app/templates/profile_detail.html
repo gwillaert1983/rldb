@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.display_name or profile.username or 'Profiel' }} — RLDB{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+  <a href="/" class="text-gray-500 hover:text-gray-300 text-sm transition">← Terug naar overzicht</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+  <!-- Foto's (2/5) -->
+  <div class="lg:col-span-2">
+    {% if profile.photos %}
+    <!-- Hoofdfoto -->
+    <div class="overflow-hidden rounded-xl bg-gray-900 cursor-zoom-in"
+         style="max-height:65vh"
+         onclick="openLightbox(currentIdx)">
+      <img id="main-photo"
+           src="{{ profile.photos[0].r2_url }}"
+           alt="{{ profile.display_name or profile.username }}"
+           class="w-full h-full object-cover transition duration-300">
+    </div>
+
+    <!-- Thumbnails -->
+    {% if profile.photos|length > 1 %}
+    <div class="flex gap-2 mt-3 overflow-x-auto pb-1">
+      {% for photo in profile.photos %}
+      <button onclick="setPhoto({{ loop.index0 }})"
+              id="thumb-{{ loop.index0 }}"
+              class="shrink-0 w-16 h-20 overflow-hidden rounded-lg border-2 transition
+                     {{ 'border-blue-500' if loop.first else 'border-transparent hover:border-gray-500' }}">
+        <img src="{{ photo.thumbnail_r2_url or photo.r2_url }}"
+             alt="Foto {{ loop.index }}"
+             class="w-full h-full object-cover"
+             loading="lazy">
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="text-gray-600 text-xs mt-2">{{ profile.photos|length }} foto{{ 's' if profile.photos|length != 1 else '' }} — klik voor volledig formaat</p>
+
+    <!-- Lightbox -->
+    <div id="lightbox"
+         class="fixed inset-0 bg-black/90 z-50 hidden items-center justify-center"
+         onclick="closeLightbox()">
+      <img id="lightbox-img" src="" alt="" class="max-h-screen max-w-screen-lg object-contain select-none">
+      <button onclick="event.stopPropagation(); navLightbox(-1)"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-white text-5xl font-thin leading-none hover:text-gray-300 transition">‹</button>
+      <button onclick="event.stopPropagation(); navLightbox(1)"
+              class="absolute right-4 top-1/2 -translate-y-1/2 text-white text-5xl font-thin leading-none hover:text-gray-300 transition">›</button>
+      <button onclick="closeLightbox()"
+              class="absolute top-4 right-4 text-white text-2xl hover:text-gray-300 transition">✕</button>
+    </div>
+
+    <script>
+    const photos = [
+      {% for photo in profile.photos %}
+      { full: "{{ photo.r2_url }}", thumb: "{{ photo.thumbnail_r2_url or photo.r2_url }}" }{{ ',' if not loop.last }}
+      {% endfor %}
+    ];
+    let currentIdx = 0;
+    let lbIdx = 0;
+
+    function setPhoto(idx) {
+      currentIdx = idx;
+      document.getElementById('main-photo').src = photos[idx].full;
+      document.querySelectorAll('[id^="thumb-"]').forEach((el, i) => {
+        el.classList.toggle('border-blue-500', i === idx);
+        el.classList.toggle('border-transparent', i !== idx);
+        el.classList.toggle('hover:border-gray-500', i !== idx);
+      });
+    }
+
+    function openLightbox(idx) {
+      lbIdx = idx;
+      const lb = document.getElementById('lightbox');
+      document.getElementById('lightbox-img').src = photos[lbIdx].full;
+      lb.classList.remove('hidden');
+      lb.classList.add('flex');
+    }
+
+    function closeLightbox() {
+      const lb = document.getElementById('lightbox');
+      lb.classList.add('hidden');
+      lb.classList.remove('flex');
+    }
+
+    function navLightbox(dir) {
+      lbIdx = (lbIdx + dir + photos.length) % photos.length;
+      document.getElementById('lightbox-img').src = photos[lbIdx].full;
+    }
+
+    document.addEventListener('keydown', e => {
+      const lb = document.getElementById('lightbox');
+      if (!lb.classList.contains('hidden')) {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') navLightbox(-1);
+        if (e.key === 'ArrowRight') navLightbox(1);
+      }
+    });
+    </script>
+
+    {% else %}
+    <div class="rounded-xl bg-gray-900 border border-gray-800 p-16 text-center text-gray-600">
+      Geen foto's beschikbaar
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Info (3/5) -->
+  <div class="lg:col-span-3 space-y-4">
+
+    <!-- Naam + contact -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-bold text-white">
+            {{ profile.display_name or profile.username or 'Onbekend' }}
+          </h1>
+          {% if profile.username and profile.display_name %}
+          <p class="text-gray-500 text-sm mt-0.5">@{{ profile.username }}</p>
+          {% endif %}
+        </div>
+        <button onclick="toggleArchiveDetail('{{ profile.id }}')"
+                id="archive-btn"
+                class="shrink-0 mt-0.5 text-xs border rounded px-2 py-1 transition
+                       {{ 'border-orange-700 text-orange-400 hover:border-orange-500' if profile.is_archived else 'border-gray-700 text-gray-500 hover:text-orange-400 hover:border-orange-700' }}">
+          {{ 'Dearchiveren' if profile.is_archived else 'Archiveren' }}
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-2">
+        {% if profile.phone %}
+        <a href="tel:{{ profile.phone }}"
+           class="flex items-center gap-3 text-sm text-gray-200 hover:text-white transition">
+          <span class="text-gray-500 w-5 text-center">📞</span>
+          <span class="font-mono">{{ profile.phone }}</span>
+        </a>
+        {% endif %}
+        {% if whatsapp %}
+        <a href="https://wa.me/{{ whatsapp }}" target="_blank"
+           class="flex items-center gap-3 text-sm text-green-400 hover:text-green-300 transition">
+          <span class="text-gray-500 w-5 text-center">💬</span>
+          <span class="font-mono">{{ whatsapp }}</span>
+        </a>
+        {% endif %}
+        {% if profile.location %}
+        <div class="flex items-center gap-3 text-sm text-gray-300">
+          <span class="text-gray-500 w-5 text-center">📍</span>
+          <span>{{ profile.location }}</span>
+        </div>
+        {% endif %}
+        {% if profile.price %}
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-gray-500 w-5 text-center">💶</span>
+          <span class="text-blue-400 font-medium">{{ profile.price }}/u</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Profiel kenmerken -->
+    {% if extra %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Profiel</h2>
+      {% set col1_keys = ['Geslacht', 'Leeftijd', 'Geaardheid', 'Nationaliteit', 'Etniciteit', 'Talen'] %}
+      {% set col2_keys = ['Lengte', 'Gewicht', 'Haarkleur', 'Kleur ogen', 'Intiem kapsel', 'Cupmaat', 'Formaat penis', 'Tatoeages', 'Piercings', 'Roker'] %}
+
+      <div class="grid grid-cols-1 gap-1.5">
+        {% for label, val in extra.items() %}
+        {% if label not in ['Tarieven privé', 'Tarieven escort'] %}
+        <div class="flex gap-2 text-sm">
+          <span class="text-gray-500 w-32 shrink-0">{{ label }}</span>
+          <span class="text-gray-200">{{ val }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Tarieven -->
+    {% if extra.get('Tarieven privé') or extra.get('Tarieven escort') %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tarieven</h2>
+      <div class="space-y-3">
+        {% if extra.get('Tarieven privé') %}
+        <div>
+          <div class="text-xs text-gray-500 mb-1">Privé ontvangst</div>
+          {% for deel in extra['Tarieven privé'].split(' / ') %}
+          <div class="text-sm text-gray-200">{{ deel.strip() }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if extra.get('Tarieven escort') %}
+        <div>
+          <div class="text-xs text-gray-500 mb-1">Escort</div>
+          {% for deel in extra['Tarieven escort'].split(' / ') %}
+          <div class="text-sm text-gray-200">{{ deel.strip() }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Mogelijkheden / Diensten -->
+    {% if services %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Mogelijkheden</h2>
+      <div class="space-y-3">
+        {% for category, items in services.items() %}
+        <div>
+          <div class="text-xs text-gray-500 mb-1.5">{{ category }}</div>
+          <div class="flex flex-wrap gap-1">
+            {% for item in items %}
+            <span class="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">{{ item }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Bio -->
+    {% if profile.bio %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Beschrijving</h2>
+      <p class="text-sm text-gray-200 whitespace-pre-line leading-relaxed">{{ profile.bio }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Metadata -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-2">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Info</h2>
+      <div class="flex gap-2 text-xs">
+        <span class="text-gray-500 w-28 shrink-0">Eerste keer gezien</span>
+        <span class="text-gray-400">{{ profile.first_seen.strftime('%d/%m/%Y %H:%M') if profile.first_seen else '—' }}</span>
+      </div>
+      <div class="flex gap-2 text-xs">
+        <span class="text-gray-500 w-28 shrink-0">Laatst gescraped</span>
+        <span class="text-gray-400">{{ profile.last_scraped.strftime('%d/%m/%Y %H:%M') if profile.last_scraped else '—' }}</span>
+      </div>
+      <div class="flex gap-2 text-xs">
+        <span class="text-gray-500 w-28 shrink-0">Laatste wijziging</span>
+        <span class="text-gray-400">{{ profile.last_changed.strftime('%d/%m/%Y %H:%M') if profile.last_changed else '—' }}</span>
+      </div>
+      <div class="flex gap-2 text-xs pt-1">
+        <span class="text-gray-500 w-28 shrink-0">Bron</span>
+        <a href="{{ profile.source_url }}" target="_blank"
+           class="text-blue-500 hover:text-blue-400 truncate transition">Bekijk profiel</a>
+      </div>
+    </div>
+
+    <!-- Advertenties -->
+    {% if profile.advertisements %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Advertenties</h2>
+      {% for ad in profile.advertisements %}
+      <div class="py-2 border-b border-gray-800/40 last:border-0">
+        <div class="flex items-center justify-between">
+          <a href="{{ ad.source_url }}" target="_blank"
+             class="text-sm text-blue-400 hover:text-blue-300 truncate flex-1 transition">
+            {{ ad.title or ad.category or 'Advertentie' }}
+          </a>
+          <div class="flex items-center gap-2 ml-3 shrink-0">
+            {% if ad.location %}
+            <span class="text-xs text-gray-500">{{ ad.location }}</span>
+            {% endif %}
+            {% if not ad.is_active %}
+            <span class="text-xs text-gray-600">verwijderd</span>
+            {% endif %}
+            {% if ad.published_at %}
+            <span class="text-xs text-gray-500">geplaatst {{ ad.published_at.strftime('%d/%m/%Y') }}</span>
+            {% else %}
+            <span class="text-xs text-gray-600">gezien {{ ad.last_seen.strftime('%d/%m/%Y') }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if ad.description %}
+        <p class="text-xs text-gray-400 mt-1 leading-relaxed line-clamp-3">{{ ad.description }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+async function toggleArchiveDetail(id) {
+  const resp = await fetch('/profile/' + id + '/archive', {method: 'POST'});
+  if (resp.ok) {
+    const data = await resp.json();
+    const btn = document.getElementById('archive-btn');
+    btn.textContent = data.is_archived ? 'Dearchiveren' : 'Archiveren';
+    if (data.is_archived) {
+      btn.className = btn.className.replace('border-gray-700 text-gray-500 hover:text-orange-400 hover:border-orange-700', 'border-orange-700 text-orange-400 hover:border-orange-500');
+    } else {
+      btn.className = btn.className.replace('border-orange-700 text-orange-400 hover:border-orange-500', 'border-gray-700 text-gray-500 hover:text-orange-400 hover:border-orange-700');
+    }
+  }
+}
+</script>
+
+{% if related %}
+<div class="mt-8">
+  <h2 class="text-sm font-medium text-gray-400 mb-3">
+    Gerelateerde profielen
+    <span class="text-gray-600 text-xs font-normal ml-1">— zelfde telefoonnummer ({{ profile.phone }})</span>
+  </h2>
+  <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+    {% for rp in related %}
+    <a href="/profile/{{ rp.id }}"
+       class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-blue-500 transition group">
+      {% if rp.photos %}
+      <div class="aspect-[3/4] overflow-hidden bg-gray-800">
+        <img src="{{ rp.photos[0].thumbnail_r2_url }}"
+             alt="{{ rp.display_name or rp.username }}"
+             class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+             loading="lazy">
+      </div>
+      {% else %}
+      <div class="aspect-[3/4] bg-gray-800 flex items-center justify-center">
+        <span class="text-gray-600 text-xs">Geen foto</span>
+      </div>
+      {% endif %}
+      <div class="p-2">
+        <div class="text-xs text-white truncate font-medium">{{ rp.display_name or rp.username or 'Onbekend' }}</div>
+        {% if rp.location %}
+        <div class="text-xs text-gray-500 truncate">{{ rp.location }}</div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="nl" class="bg-gray-950 text-gray-100 h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}RLDB{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: { 925: '#0f1117', 950: '#0b0d14' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-gray-950 flex flex-col">
+
+  {% set path = request.url.path %}
+  <nav class="bg-gray-900 border-b border-gray-800 px-5 flex items-center gap-0 shrink-0 h-11">
+    <a href="/" class="font-bold text-white tracking-tight text-sm mr-5">RLDB</a>
+
+    <a href="/" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/' or path.startswith('/profile') %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Profielen
+    </a>
+
+    <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
+       {% if path == '/status' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Status
+      <span id="scraper-badge" class="hidden w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></span>
+    </a>
+
+    <a href="/settings" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/settings' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Instellingen
+    </a>
+
+    <div class="ml-auto">
+      <form method="post" action="/logout">
+        <button class="text-gray-600 hover:text-gray-300 text-xs transition px-2 py-1">Uitloggen</button>
+      </form>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-5">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+  (function () {
+    function refreshBadge() {
+      fetch('/status/data')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const b = document.getElementById('scraper-badge');
+          if (b && d) b.classList.toggle('hidden', !d.is_running);
+        })
+        .catch(() => {});
+    }
+    refreshBadge();
+    setInterval(refreshBadge, 15000);
+  })();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}Profielen — RLDB{% endblock %}
+{% block content %}
+
+<div class="flex gap-5 items-start">
+
+  <!-- ═══════════════════════════════════════
+       SIDEBAR — zoek + filters
+  ══════════════════════════════════════════ -->
+  <aside class="w-52 shrink-0 sticky top-5">
+    <form id="filter-form" method="get" action="/">
+      <input type="hidden" name="page" value="1">
+
+      <!-- Zoekbalk -->
+      <div class="mb-3">
+        <input name="q" id="inp-q" value="{{ q }}"
+               placeholder="Zoeken…"
+               class="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <!-- Filter card -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2.5">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-1 border-b border-gray-800">
+          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filters</span>
+          {% if filters_active %}
+          <span class="text-xs bg-blue-600/30 text-blue-400 border border-blue-600/40 px-1.5 py-0.5 rounded-full leading-none">actief</span>
+          {% endif %}
+        </div>
+
+        <!-- Geslacht -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Geslacht</label>
+          <select name="gender" id="inp-gender"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            <option value="Vrouw" {{ 'selected' if gender == 'Vrouw' }}>Vrouw</option>
+            <option value="Man" {{ 'selected' if gender == 'Man' }}>Man</option>
+            <option value="Transseksueel" {{ 'selected' if gender == 'Transseksueel' }}>Trans</option>
+            <option value="Koppel" {{ 'selected' if gender == 'Koppel' }}>Koppel</option>
+          </select>
+        </div>
+
+        <!-- Provincie -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Provincie</label>
+          <select name="province" id="inp-province"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for prov in distinct_provinces %}
+            <option value="{{ prov }}" {{ 'selected' if province == prov }}>{{ prov }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Stad -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Stad / regio</label>
+          <select name="location" id="inp-location"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for loc in distinct_locations %}
+            <option value="{{ loc }}" {{ 'selected' if location == loc }}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Nationaliteit -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Nationaliteit</label>
+          <select name="nationality" id="inp-nationality"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for nat in distinct_nationalities %}
+            <option value="{{ nat }}" {{ 'selected' if nationality == nat }}>{{ nat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Taal -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Taal</label>
+          <select name="language" id="inp-language"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for lang in distinct_languages %}
+            <option value="{{ lang }}" {{ 'selected' if language == lang }}>{{ lang }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Advertentie type -->
+        {% if distinct_ad_categories %}
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Advertentie type</label>
+          <select name="ad_category" id="inp-ad-category"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle types</option>
+            {% for cat in distinct_ad_categories %}
+            <option value="{{ cat }}" {{ 'selected' if ad_category == cat }}>{{ cat|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Advertentie locatie -->
+        {% if distinct_ad_locations %}
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Advertentie locatie</label>
+          <select name="ad_location" id="inp-ad-location"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle locaties</option>
+            {% for loc in distinct_ad_locations %}
+            <option value="{{ loc }}" {{ 'selected' if ad_location == loc }}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Checkboxes -->
+        <div class="space-y-1.5 pt-0.5">
+          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" name="with_phone" value="1" id="inp-phone"
+                   {{ 'checked' if with_phone }}
+                   class="rounded accent-blue-500">
+            Heeft telefoon
+          </label>
+          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" name="with_photo" value="1" id="inp-photo"
+                   {{ 'checked' if with_photo }}
+                   class="rounded accent-blue-500">
+            Heeft foto's
+          </label>
+          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" name="show_archived" value="1" id="inp-archived"
+                   {{ 'checked' if show_archived }}
+                   class="rounded accent-blue-500">
+            Toon gearchiveerd
+          </label>
+        </div>
+
+        <!-- Knoppen -->
+        <div class="space-y-1.5 pt-1">
+          <button type="submit"
+                  class="w-full bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+            Toepassen
+          </button>
+          {% if q or filters_active %}
+          <button type="button" onclick="clearFilters()"
+                  class="w-full bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-gray-200 transition">
+            Wissen
+          </button>
+          {% endif %}
+        </div>
+
+      </div>
+    </form>
+  </aside>
+
+  <!-- ═══════════════════════════════════════
+       HOOFDCONTENT
+  ══════════════════════════════════════════ -->
+  <div class="flex-1 min-w-0">
+
+    <!-- Header: teller + weergave-toggle -->
+    <div class="flex items-center justify-between mb-4">
+      <span class="text-gray-500 text-sm">
+        {{ total }} profiel{{ 'en' if total != 1 else '' }}
+      </span>
+      <div class="flex rounded-lg overflow-hidden border border-gray-800 shrink-0">
+        <button id="btn-grid" type="button" onclick="setView('grid')" title="Rasterweergave"
+          class="px-3 py-1.5 text-gray-400 hover:text-white transition">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"><path d="M1 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1zM1 7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1zM1 12a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1z"/></svg>
+        </button>
+        <button id="btn-list" type="button" onclick="setView('list')" title="Lijstweergave"
+          class="px-3 py-1.5 text-gray-400 hover:text-white transition border-l border-gray-800">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    {% if profiles %}
+
+    <!-- ── Rasterweergave ── -->
+    <div id="view-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      {% for profile in profiles %}
+      <a href="/profile/{{ profile.id }}"
+         id="card-{{ profile.id }}"
+         class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition">
+        {% if profile.photos %}
+        <div class="aspect-[3/4] overflow-hidden bg-gray-800">
+          <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+               alt="{{ profile.display_name or profile.username }}"
+               class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+               loading="lazy">
+        </div>
+        {% else %}
+        <div class="aspect-[3/4] bg-gray-800 flex items-center justify-center">
+          <span class="text-gray-700 text-xs">—</span>
+        </div>
+        {% endif %}
+        <div class="p-2">
+          <div class="font-medium text-xs text-white truncate leading-snug">
+            {{ profile.display_name or profile.username or '—' }}
+          </div>
+          {% set ex = profile.extra_data | from_json %}
+          <div class="text-xs text-gray-500 truncate mt-0.5 leading-snug">
+            {{ ex.get('age', '') }}{% if ex.get('age') and ex.get('nationality') %} · {% endif %}{{ ex.get('nationality', '') }}
+          </div>
+          {% if profile.location %}
+          <div class="text-xs text-gray-600 truncate leading-snug">{{ profile.location }}</div>
+          {% endif %}
+        </div>
+        <button onclick="toggleArchive(event, '{{ profile.id }}')"
+                class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
+                       bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                       text-gray-500 hover:text-orange-400 text-xs leading-none"
+                title="Archiveren">✕</button>
+      </a>
+      {% endfor %}
+    </div>
+
+    <!-- ── Lijstweergave ── -->
+    <div id="view-list" style="display:none">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-800">
+              <th class="w-12 py-3"></th>
+              <th class="text-left text-xs text-gray-500 font-normal px-3 py-3">Naam</th>
+              <th class="text-left text-xs text-gray-500 font-normal px-3 py-3">Lft</th>
+              <th class="text-left text-xs text-gray-500 font-normal px-3 py-3">Herkomst</th>
+              <th class="text-left text-xs text-gray-500 font-normal px-3 py-3">Locatie</th>
+              <th class="text-left text-xs text-gray-500 font-normal px-3 py-3">Telefoon</th>
+              <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Gescraped</th>
+              <th class="w-8 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for profile in profiles %}
+            {% set ex = profile.extra_data | from_json %}
+            <tr id="card-{{ profile.id }}"
+                class="border-b border-gray-800/50 hover:bg-gray-800/30 transition cursor-pointer"
+                onclick="location.href='/profile/{{ profile.id }}'">
+              <td class="pl-3 py-2">
+                {% if profile.photos %}
+                <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+                     alt="{{ profile.display_name or profile.username }}"
+                     class="w-9 h-11 object-cover rounded-lg">
+                {% else %}
+                <div class="w-9 h-11 bg-gray-800 rounded-lg"></div>
+                {% endif %}
+              </td>
+              <td class="px-3 py-2">
+                <div class="text-white text-sm font-medium leading-snug">{{ profile.display_name or profile.username or '—' }}</div>
+              </td>
+              <td class="px-3 py-2 text-gray-400 text-xs">{{ ex.get('age', '—') }}</td>
+              <td class="px-3 py-2 text-gray-400 text-xs truncate max-w-[90px]">{{ ex.get('nationality', '—') }}</td>
+              <td class="px-3 py-2 text-gray-400 text-xs">{{ profile.location or '—' }}</td>
+              <td class="px-3 py-2 text-gray-400 font-mono text-xs">{{ profile.phone or '—' }}</td>
+              <td class="px-3 py-2 text-right text-gray-600 text-xs">
+                {{ profile.last_scraped.strftime('%d/%m/%y') if profile.last_scraped else '—' }}
+              </td>
+              <td class="px-2 py-2 text-center">
+                <button onclick="toggleArchive(event, '{{ profile.id }}')"
+                        class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
+                        title="Archiveren">✕</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Paginatie ── -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-center gap-1.5 mt-6">
+      {% if page > 1 %}
+      <button onclick="goToPage({{ page - 1 }})"
+              class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-sm text-gray-400 transition">
+        ←
+      </button>
+      {% endif %}
+
+      {% for p in range([1, page - 2]|max, [total_pages + 1, page + 3]|min) %}
+      <button onclick="goToPage({{ p }})"
+              class="px-3 py-1.5 rounded-lg text-sm transition
+                     {{ 'bg-blue-600 text-white border border-blue-600' if p == page else 'bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400' }}">
+        {{ p }}
+      </button>
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <button onclick="goToPage({{ page + 1 }})"
+              class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-sm text-gray-400 transition">
+        →
+      </button>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="flex flex-col items-center justify-center py-24 text-gray-600">
+      {% if q or filters_active %}
+      <p class="text-base">Geen profielen gevonden</p>
+      <button type="button" onclick="clearFilters()"
+              class="text-blue-500 hover:text-blue-400 text-sm mt-3 transition">
+        Filters wissen
+      </button>
+      {% else %}
+      <p class="text-base">Nog geen profielen beschikbaar</p>
+      <p class="text-sm mt-2 text-gray-700">Wacht op de eerste scrape-run of controleer de status.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div><!-- /hoofdcontent -->
+</div><!-- /flex wrapper -->
+
+<script>
+// --- Paginatie ---
+function goToPage(p) {
+  const params = new URLSearchParams(window.location.search);
+  params.set('page', p);
+  location.href = '/?' + params.toString();
+}
+
+// --- Weergave toggle ---
+function setView(v) {
+  const grid = document.getElementById('view-grid');
+  const list = document.getElementById('view-list');
+  const bGrid = document.getElementById('btn-grid');
+  const bList = document.getElementById('btn-list');
+  if (!grid || !list) return;
+  const active = 'text-white bg-gray-800';
+  const inactive = 'text-gray-400';
+  if (v === 'grid') {
+    grid.style.display = '';
+    list.style.display = 'none';
+    bGrid.className = bGrid.className.replace(inactive, active);
+    bList.className = bList.className.replace(active, inactive);
+  } else {
+    grid.style.display = 'none';
+    list.style.display = '';
+    bList.className = bList.className.replace(inactive, active);
+    bGrid.className = bGrid.className.replace(active, inactive);
+  }
+  localStorage.setItem('dashboardView', v);
+}
+setView(localStorage.getItem('dashboardView') || 'grid');
+
+// --- Filter persistentie ---
+const FILTER_KEY = 'dashboardFilters';
+
+document.getElementById('filter-form').addEventListener('submit', () => {
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const chk = id => { const el = document.getElementById(id); return el && el.checked ? '1' : ''; };
+  const f = {
+    q: val('inp-q'),
+    gender: val('inp-gender'),
+    province: val('inp-province'),
+    location: val('inp-location'),
+    nationality: val('inp-nationality'),
+    language: val('inp-language'),
+    ad_category: val('inp-ad-category'),
+    ad_location: val('inp-ad-location'),
+    with_phone: chk('inp-phone'),
+    with_photo: chk('inp-photo'),
+    show_archived: chk('inp-archived'),
+  };
+  localStorage.setItem(FILTER_KEY, JSON.stringify(f));
+});
+
+// Auto-redirect op kale /
+const urlParams = new URLSearchParams(window.location.search);
+const filterKeys = ['q', 'gender', 'province', 'location', 'nationality', 'language', 'ad_category', 'ad_location', 'with_phone', 'with_photo', 'show_archived'];
+const hasUrlFilters = filterKeys.some(k => urlParams.has(k) && urlParams.get(k));
+const hasActive = {{ 'true' if (filters_active or q) else 'false' }};
+
+if (!hasUrlFilters && !hasActive) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null');
+    if (saved) {
+      const p = new URLSearchParams();
+      if (saved.q) p.set('q', saved.q);
+      if (saved.gender) p.set('gender', saved.gender);
+      if (saved.province) p.set('province', saved.province);
+      if (saved.location) p.set('location', saved.location);
+      if (saved.nationality) p.set('nationality', saved.nationality);
+      if (saved.language) p.set('language', saved.language);
+      if (saved.ad_category) p.set('ad_category', saved.ad_category);
+      if (saved.ad_location) p.set('ad_location', saved.ad_location);
+      if (saved.with_phone) p.set('with_phone', '1');
+      if (saved.with_photo) p.set('with_photo', '1');
+      if (saved.show_archived) p.set('show_archived', '1');
+      const qs = p.toString();
+      if (qs) location.replace('/?' + qs);
+    }
+  } catch(e) {}
+}
+
+function clearFilters() {
+  localStorage.removeItem(FILTER_KEY);
+  location.href = '/';
+}
+
+// --- Archiveren ---
+async function toggleArchive(event, profileId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
+  if (resp.ok) {
+    const card = document.getElementById('card-' + profileId);
+    if (card) {
+      card.style.transition = 'opacity 0.2s';
+      card.style.opacity = '0';
+      setTimeout(() => card.remove(), 200);
+    }
+  }
+}
+</script>
+
+{% endblock %}

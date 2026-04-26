@@ -1,0 +1,70 @@
+import libsql_experimental as libsql
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from app.config import settings
+
+
+class _LibSQLConnection:
+    """Wraps libsql connection to fill in missing sqlite3-compat methods."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    # SQLAlchemy's SQLite dialect calls this; libsql doesn't support it
+    def create_function(self, name, num_params, func, deterministic=False):
+        pass
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def execute(self, *a, **kw):
+        return self._conn.execute(*a, **kw)
+
+    def executemany(self, *a, **kw):
+        return self._conn.executemany(*a, **kw)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+
+def _make_connection():
+    conn = libsql.connect(
+        database=settings.TURSO_DATABASE_URL,
+        auth_token=settings.TURSO_AUTH_TOKEN,
+    )
+    return _LibSQLConnection(conn)
+
+
+engine = create_engine("sqlite://", creator=_make_connection)
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+
+def init_db():
+    from app.models import Base
+    from sqlalchemy import text
+    Base.metadata.create_all(bind=engine)
+    # Add columns introduced after initial table creation
+    _migrate(text("ALTER TABLE scraper_settings ADD COLUMN gender_filter TEXT"))
+    _migrate(text("ALTER TABLE scraper_settings ADD COLUMN scrape_interval_minutes INTEGER"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN is_archived INTEGER DEFAULT 0"))
+    _migrate(text("ALTER TABLE scrape_runs ADD COLUMN profiles_processed INTEGER DEFAULT 0"))
+    _migrate(text("ALTER TABLE advertisements ADD COLUMN description TEXT"))
+    _migrate(text("ALTER TABLE advertisements ADD COLUMN published_at DATETIME"))
+
+
+def _migrate(stmt):
+    try:
+        with engine.connect() as conn:
+            conn.execute(stmt)
+            conn.commit()
+    except Exception:
+        pass  # Column already exists
