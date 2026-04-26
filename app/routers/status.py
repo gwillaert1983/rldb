@@ -1,10 +1,21 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_login
 from app.models import Photo, Profile, ScrapeRun
 from app.templates_config import templates
+
+
+def _fmt_bytes(b: int) -> str:
+    if b < 1024:
+        return f"{b} B"
+    if b < 1024 ** 2:
+        return f"{b / 1024:.1f} KB"
+    if b < 1024 ** 3:
+        return f"{b / 1024 ** 2:.1f} MB"
+    return f"{b / 1024 ** 3:.2f} GB"
 
 router = APIRouter()
 
@@ -22,6 +33,7 @@ async def status_page(
 
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
+    storage_bytes = db.query(func.sum(Photo.file_size_bytes)).scalar() or 0
     last_run = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).first()
     recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(20).all()
 
@@ -31,6 +43,8 @@ async def status_page(
             "request": request,
             "total_profiles": total_profiles,
             "total_photos": total_photos,
+            "storage_bytes": storage_bytes,
+            "storage_fmt": _fmt_bytes(storage_bytes),
             "last_run": last_run,
             "recent_runs": recent_runs,
             "is_running": scrape_is_running(),
@@ -50,6 +64,7 @@ async def status_data(
 
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
+    storage_bytes = db.query(func.sum(Photo.file_size_bytes)).scalar() or 0
     recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(20).all()
     last_run = recent_runs[0] if recent_runs else None
 
@@ -75,6 +90,7 @@ async def status_data(
         "is_running": scrape_is_running(),
         "total_profiles": total_profiles,
         "total_photos": total_photos,
+        "storage_fmt": _fmt_bytes(storage_bytes),
         "runs_count": len(recent_runs),
         "last_run": fmt_run(last_run) if last_run else None,
         "recent_runs": [fmt_run(r) for r in recent_runs],

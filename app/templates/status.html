@@ -42,7 +42,7 @@
 </div>
 
 <!-- Statistieken -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
     <div class="text-2xl font-bold text-white" id="stat-profiles">{{ total_profiles }}</div>
     <div class="text-gray-500 text-xs mt-1">Profielen</div>
@@ -50,6 +50,10 @@
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
     <div class="text-2xl font-bold text-white" id="stat-photos">{{ total_photos }}</div>
     <div class="text-gray-500 text-xs mt-1">Foto's</div>
+  </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white" id="stat-storage">{{ storage_fmt }}</div>
+    <div class="text-gray-500 text-xs mt-1">R2 opslag</div>
   </div>
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
     <div class="text-2xl font-bold text-white" id="stat-runs">{{ recent_runs|length }}</div>
@@ -160,6 +164,7 @@ async function poll() {
     // Stats
     document.getElementById('stat-profiles').textContent = d.total_profiles;
     document.getElementById('stat-photos').textContent   = d.total_photos;
+    document.getElementById('stat-storage').textContent  = d.storage_fmt;
     document.getElementById('stat-runs').textContent     = d.runs_count;
 
     // Laatste run kaart
