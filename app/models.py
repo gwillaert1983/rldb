@@ -144,3 +144,7 @@ class ScraperSettings(Base):
     max_height              = Column(Integer, nullable=True)
     gender_filter           = Column(Text, nullable=True)  # comma-separated: "Vrouw,Man,Trans,Koppel"
     scrape_interval_minutes = Column(Integer, nullable=True)
+    window_0_6              = Column(Integer, nullable=False, server_default="1")
+    window_6_12             = Column(Integer, nullable=False, server_default="1")
+    window_12_18            = Column(Integer, nullable=False, server_default="1")
+    window_18_24            = Column(Integer, nullable=False, server_default="1")

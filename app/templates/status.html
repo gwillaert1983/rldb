@@ -84,6 +84,41 @@
   </div>
 </div>
 
+<!-- Heatmap: activiteit per tijdvenster -->
+{% if heatmap %}
+<div class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
+  <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Activiteit op de site (nieuwe + gewijzigde profielen)</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead>
+        <tr>
+          <th class="text-gray-600 font-normal pb-2 text-left pr-3 w-12"></th>
+          {% for day in ['Ma','Di','Wo','Do','Vr','Za','Zo'] %}
+          <th class="text-gray-500 font-normal pb-2 text-center px-1">{{ day }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set slot_labels = ['0–6u','6–12u','12–18u','18–24u'] %}
+        {% for row in heatmap.grid %}
+        <tr>
+          <td class="text-gray-600 py-1 pr-3 whitespace-nowrap">{{ slot_labels[loop.index0] }}</td>
+          {% for val in row %}
+          {% set opacity = (val / heatmap.max_val * 0.85 + 0.08) | round(2) if heatmap.max_val > 0 else 0.08 %}
+          <td class="py-1 px-1">
+            <div class="h-7 rounded"
+                 style="background:rgba(147,51,234,{{ opacity }});"
+                 title="{{ val }} profiel{{ 'en' if val != 1 else '' }}"></div>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Run geschiedenis -->
 <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recente runs</h2>
 <div id="runs-table-wrapper">

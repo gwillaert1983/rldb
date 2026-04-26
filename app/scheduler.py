@@ -31,7 +31,7 @@ def start_scheduler():
         pass
 
     _scheduler.add_job(
-        run_scrape_job,
+        _scheduled_scrape_job,
         trigger=IntervalTrigger(minutes=interval),
         id="scrape_job",
         replace_existing=True,
@@ -80,6 +80,31 @@ def get_next_run_time() -> str | None:
 
 def run_scrape_job():
     asyncio.run(_async_scrape_job())
+
+
+def _scheduled_scrape_job():
+    """APScheduler entry-point — skips the run if the current time window is disabled."""
+    import pytz
+    from app.models import ScraperSettings
+    tz = pytz.timezone("Europe/Brussels")
+    hour = datetime.now(tz).hour
+    slot = hour // 6  # 0=0-6, 1=6-12, 2=12-18, 3=18-24
+    try:
+        db = SessionLocal()
+        s = db.query(ScraperSettings).filter_by(id="settings").first()
+        windows = [
+            int(getattr(s, "window_0_6",  1) or 1) if s else 1,
+            int(getattr(s, "window_6_12",  1) or 1) if s else 1,
+            int(getattr(s, "window_12_18", 1) or 1) if s else 1,
+            int(getattr(s, "window_18_24", 1) or 1) if s else 1,
+        ]
+        db.close()
+    except Exception:
+        windows = [1, 1, 1, 1]
+    if not windows[slot]:
+        logger.info("Scrape overgeslagen: venster %d:00–%d:00 uitgeschakeld", slot * 6, (slot + 1) * 6)
+        return
+    run_scrape_job()
 
 
 def _passes_filter(extra: dict, s) -> bool:

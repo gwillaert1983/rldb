@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_login
-from app.models import Photo, Profile, ScrapeRun
+from app.models import Photo, Profile, ScrapeRun, ScrapeStatus
 from app.templates_config import templates
 
 
@@ -46,6 +46,22 @@ def _group_runs_by_day(runs: list) -> list[dict]:
     ]
 
 
+def _compute_heatmap(db) -> dict:
+    tz = pytz.timezone("Europe/Brussels")
+    runs = db.query(ScrapeRun).filter(ScrapeRun.status == ScrapeStatus.completed).all()
+    grid = [[0] * 7 for _ in range(4)]  # [slot 0-3][weekday 0-6]
+    for r in runs:
+        dt = r.started_at
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        local = dt.astimezone(tz)
+        slot = local.hour // 6
+        day = local.weekday()
+        grid[slot][day] += (r.profiles_new or 0) + (r.profiles_updated or 0)
+    max_val = max((max(row) for row in grid), default=1) or 1
+    return {"grid": grid, "max_val": max_val}
+
+
 router = APIRouter()
 
 
@@ -80,6 +96,7 @@ async def status_page(
             "runs_by_day": runs_by_day,
             "is_running": scrape_is_running(),
             "next_run_time": get_next_run_time(),
+            "heatmap": _compute_heatmap(db),
         },
     )
 

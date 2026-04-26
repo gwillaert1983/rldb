@@ -68,6 +68,26 @@
           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
         <p class="text-xs text-gray-600 mt-1">Laat leeg om de .env standaard te gebruiken ({{ env_interval }} min). Wijziging is direct van kracht, zonder herstart.</p>
       </div>
+      <div>
+        <label class="text-xs text-gray-500 mb-2 block">Actieve tijdvensters</label>
+        <div class="grid grid-cols-2 gap-2">
+          {% set windows = [
+            ('window_0_6',  '0–6u',   s.window_0_6   if s else None),
+            ('window_6_12', '6–12u',  s.window_6_12  if s else None),
+            ('window_12_18','12–18u', s.window_12_18 if s else None),
+            ('window_18_24','18–24u', s.window_18_24 if s else None),
+          ] %}
+          {% for fname, flabel, fval in windows %}
+          <label class="flex items-center gap-2 cursor-pointer bg-gray-800 rounded-lg px-3 py-2">
+            <input type="checkbox" name="{{ fname }}" value="1"
+              {% if fval is none or fval %}checked{% endif %}
+              class="w-4 h-4 rounded accent-blue-500">
+            <span class="text-sm text-gray-200">{{ flabel }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="text-xs text-gray-600 mt-1">Geplande scrapes worden alleen gestart in aangevinkte vensters. Handmatig starten werkt altijd.</p>
+      </div>
     </div>
 
     <!-- Rechts: Profielfilters -->

@@ -113,6 +113,10 @@ async def settings_save(
     max_height: str = Form(""),
     genders: List[str] = Form([]),
     scrape_interval: str = Form(""),
+    window_0_6: str = Form(""),
+    window_6_12: str = Form(""),
+    window_12_18: str = Form(""),
+    window_18_24: str = Form(""),
 ):
     if isinstance(user, RedirectResponse):
         return user
@@ -129,6 +133,10 @@ async def settings_save(
     s.min_height    = _opt_int(min_height)
     s.max_height    = _opt_int(max_height)
     s.gender_filter = ",".join(genders) if genders else None
+    s.window_0_6   = 1 if window_0_6   else 0
+    s.window_6_12  = 1 if window_6_12  else 0
+    s.window_12_18 = 1 if window_12_18 else 0
+    s.window_18_24 = 1 if window_18_24 else 0
 
     new_interval = _opt_int(scrape_interval)
     s.scrape_interval_minutes = new_interval
