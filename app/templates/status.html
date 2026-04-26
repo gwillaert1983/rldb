@@ -200,8 +200,8 @@ async function poll() {
       }
     }
 
-    // Pagina herladen als run net klaar is
-    if (wasRunning && !d.is_running) { location.reload(); return; }
+    // Pagina herladen als run net klaar is of net gestart is (zodat run-rij in HTML staat)
+    if (wasRunning !== d.is_running) { location.reload(); return; }
     wasRunning = d.is_running;
   } catch(e) {}
 
@@ -212,9 +212,8 @@ async function startScrape() {
   document.getElementById('scrape-btn').disabled = true;
   document.getElementById('scrape-btn').textContent = 'Starten…';
   await fetch('/scrape/start', { method: 'POST' });
-  wasRunning = true;
-  clearTimeout(pollTimer);
-  poll();
+  // Reload so the new run row exists in the HTML before live polling starts
+  setTimeout(() => location.reload(), 800);
 }
 
 async function stopScrape() {
