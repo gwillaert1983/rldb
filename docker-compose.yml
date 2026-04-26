@@ -1,6 +1,6 @@
 services:
   app:
-    image: rldb:latest
+    image: ghcr.io/gwillaert1983/rldb:latest
     ports:
       - "8000:8000"
     environment:
