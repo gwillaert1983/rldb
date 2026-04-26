@@ -17,7 +17,7 @@
     }
   </script>
 </head>
-<body class="min-h-screen bg-gray-950 flex flex-col">
+<body class="h-screen bg-gray-950 flex flex-col overflow-hidden">
 
   {% set path = request.url.path %}
   <nav class="bg-gray-900 border-b border-gray-800 px-5 flex items-center gap-0 shrink-0 h-11">
@@ -26,6 +26,11 @@
     <a href="/" class="px-3 h-11 flex items-center text-sm transition border-b-2
        {% if path == '/' or path.startswith('/profile') %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
       Profielen
+    </a>
+
+    <a href="/archived" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/archived' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Archief
     </a>
 
     <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
@@ -46,7 +51,7 @@
     </div>
   </nav>
 
-  <main class="flex-1 p-5">
+  <main class="flex-1 overflow-y-auto p-5">
     {% block content %}{% endblock %}
   </main>
 

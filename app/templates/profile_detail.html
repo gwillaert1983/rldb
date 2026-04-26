@@ -261,10 +261,18 @@
       {% for ad in profile.advertisements %}
       <div class="py-2 border-b border-gray-800/40 last:border-0">
         <div class="flex items-center justify-between">
-          <a href="{{ ad.source_url }}" target="_blank"
-             class="text-sm text-blue-400 hover:text-blue-300 truncate flex-1 transition">
+          <button onclick="showAdModal(this)"
+                  data-title="{{ (ad.title or ad.category or 'Advertentie') | e }}"
+                  data-category="{{ (ad.category or '') | e }}"
+                  data-location="{{ (ad.location or '') | e }}"
+                  data-description="{{ (ad.description or '') | e }}"
+                  data-published="{{ ad.published_at.strftime('%d/%m/%Y') if ad.published_at else '' }}"
+                  data-seen="{{ ad.last_seen.strftime('%d/%m/%Y') }}"
+                  data-active="{{ 'true' if ad.is_active else 'false' }}"
+                  data-url="{{ ad.source_url | e }}"
+                  class="text-sm text-blue-400 hover:text-blue-300 truncate flex-1 text-left transition">
             {{ ad.title or ad.category or 'Advertentie' }}
-          </a>
+          </button>
           <div class="flex items-center gap-2 ml-3 shrink-0">
             {% if ad.location %}
             <span class="text-xs text-gray-500">{{ ad.location }}</span>
@@ -273,14 +281,14 @@
             <span class="text-xs text-gray-600">verwijderd</span>
             {% endif %}
             {% if ad.published_at %}
-            <span class="text-xs text-gray-500">geplaatst {{ ad.published_at.strftime('%d/%m/%Y') }}</span>
+            <span class="text-xs text-gray-500">{{ ad.published_at.strftime('%d/%m/%Y') }}</span>
             {% else %}
-            <span class="text-xs text-gray-600">gezien {{ ad.last_seen.strftime('%d/%m/%Y') }}</span>
+            <span class="text-xs text-gray-600">{{ ad.last_seen.strftime('%d/%m/%Y') }}</span>
             {% endif %}
           </div>
         </div>
         {% if ad.description %}
-        <p class="text-xs text-gray-400 mt-1 leading-relaxed line-clamp-3">{{ ad.description }}</p>
+        <p class="text-xs text-gray-400 mt-1 leading-relaxed line-clamp-2">{{ ad.description }}</p>
         {% endif %}
       </div>
       {% endfor %}
@@ -289,6 +297,71 @@
 
   </div>
 </div>
+
+<!-- Advertentie modal -->
+<div id="ad-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4"
+     onclick="if(event.target===this) closeAdModal()">
+  <div class="absolute inset-0 bg-black/70"></div>
+  <div class="relative bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+    <button onclick="closeAdModal()"
+            class="absolute top-4 right-4 text-gray-500 hover:text-white transition text-xl leading-none">✕</button>
+    <h2 id="modal-title" class="text-base font-semibold text-white mb-4 pr-6"></h2>
+    <div class="space-y-3 text-sm">
+      <div class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Categorie</span>
+        <span id="modal-category" class="text-gray-300"></span>
+      </div>
+      <div class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Locatie</span>
+        <span id="modal-location" class="text-gray-300"></span>
+      </div>
+      <div class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Geplaatst op</span>
+        <span id="modal-published" class="text-gray-300"></span>
+      </div>
+      <div class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Laatste check</span>
+        <span id="modal-seen" class="text-gray-300"></span>
+      </div>
+      <div class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Status</span>
+        <span id="modal-status" class="text-gray-300"></span>
+      </div>
+      <div id="modal-desc-wrap" class="flex gap-3">
+        <span class="text-gray-500 w-28 shrink-0">Beschrijving</span>
+        <p id="modal-description" class="text-gray-300 text-xs leading-relaxed whitespace-pre-line flex-1"></p>
+      </div>
+    </div>
+    <div class="mt-5 pt-4 border-t border-gray-800">
+      <a id="modal-link" href="#" target="_blank"
+         class="text-xs text-blue-400 hover:text-blue-300 transition">
+        Bekijk originele advertentie →
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function showAdModal(btn) {
+  const d = btn.dataset;
+  document.getElementById('modal-title').textContent       = d.title;
+  document.getElementById('modal-category').textContent    = d.category || '—';
+  document.getElementById('modal-location').textContent    = d.location || '—';
+  document.getElementById('modal-published').textContent   = d.published || '—';
+  document.getElementById('modal-seen').textContent        = d.seen;
+  document.getElementById('modal-status').textContent      = d.active === 'true' ? 'Actief' : 'Verwijderd';
+  document.getElementById('modal-description').textContent = d.description || '';
+  document.getElementById('modal-desc-wrap').style.display = d.description ? '' : 'none';
+  document.getElementById('modal-link').href               = d.url;
+  document.getElementById('ad-modal').classList.remove('hidden');
+}
+function closeAdModal() {
+  document.getElementById('ad-modal').classList.add('hidden');
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAdModal();
+});
+</script>
 
 <script>
 async function toggleArchiveDetail(id) {

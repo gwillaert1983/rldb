@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Profielen — RLDB{% endblock %}
+{% block title %}{% if archive_view %}Archief{% else %}Profielen{% endif %} — RLDB{% endblock %}
 {% block content %}
 
 <div class="flex gap-5 items-start">
@@ -8,8 +8,11 @@
        SIDEBAR — zoek + filters
   ══════════════════════════════════════════ -->
   <aside class="w-52 shrink-0 sticky top-5">
-    <form id="filter-form" method="get" action="/">
+    <form id="filter-form" method="get" action="{% if archive_view %}/archived{% else %}/{% endif %}">
       <input type="hidden" name="page" value="1">
+      {% if archive_view %}
+      <input type="hidden" name="archived_only" value="1">
+      {% endif %}
 
       <!-- Zoekbalk -->
       <div class="mb-3">
@@ -90,7 +93,8 @@
           </select>
         </div>
 
-        <!-- Advertentie type -->
+        <!-- Advertentie filters (niet op archiefpagina) -->
+        {% if not archive_view %}
         {% if distinct_ad_categories %}
         <div>
           <label class="block text-xs text-gray-500 mb-1">Advertentie type</label>
@@ -104,7 +108,6 @@
         </div>
         {% endif %}
 
-        <!-- Advertentie locatie -->
         {% if distinct_ad_locations %}
         <div>
           <label class="block text-xs text-gray-500 mb-1">Advertentie locatie</label>
@@ -116,6 +119,7 @@
             {% endfor %}
           </select>
         </div>
+        {% endif %}
         {% endif %}
 
         <!-- Checkboxes -->
@@ -132,12 +136,14 @@
                    class="rounded accent-blue-500">
             Heeft foto's
           </label>
+          {% if not archive_view %}
           <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
             <input type="checkbox" name="show_archived" value="1" id="inp-archived"
                    {{ 'checked' if show_archived }}
                    class="rounded accent-blue-500">
             Toon gearchiveerd
           </label>
+          {% endif %}
         </div>
 
         <!-- Knoppen -->
@@ -166,7 +172,11 @@
     <!-- Header: teller + weergave-toggle -->
     <div class="flex items-center justify-between mb-4">
       <span class="text-gray-500 text-sm">
+        {% if archive_view %}
+        Archief — {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% else %}
         {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% endif %}
       </span>
       <div class="flex rounded-lg overflow-hidden border border-gray-800 shrink-0">
         <button id="btn-grid" type="button" onclick="setView('grid')" title="Rasterweergave"
@@ -274,33 +284,6 @@
       </div>
     </div>
 
-    <!-- ── Paginatie ── -->
-    {% if total_pages > 1 %}
-    <div class="flex items-center justify-center gap-1.5 mt-6">
-      {% if page > 1 %}
-      <button onclick="goToPage({{ page - 1 }})"
-              class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-sm text-gray-400 transition">
-        ←
-      </button>
-      {% endif %}
-
-      {% for p in range([1, page - 2]|max, [total_pages + 1, page + 3]|min) %}
-      <button onclick="goToPage({{ p }})"
-              class="px-3 py-1.5 rounded-lg text-sm transition
-                     {{ 'bg-blue-600 text-white border border-blue-600' if p == page else 'bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400' }}">
-        {{ p }}
-      </button>
-      {% endfor %}
-
-      {% if page < total_pages %}
-      <button onclick="goToPage({{ page + 1 }})"
-              class="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-sm text-gray-400 transition">
-        →
-      </button>
-      {% endif %}
-    </div>
-    {% endif %}
-
     {% else %}
     <div class="flex flex-col items-center justify-center py-24 text-gray-600">
       {% if q or filters_active %}
@@ -309,6 +292,8 @@
               class="text-blue-500 hover:text-blue-400 text-sm mt-3 transition">
         Filters wissen
       </button>
+      {% elif archive_view %}
+      <p class="text-base">Geen gearchiveerde profielen</p>
       {% else %}
       <p class="text-base">Nog geen profielen beschikbaar</p>
       <p class="text-sm mt-2 text-gray-700">Wacht op de eerste scrape-run of controleer de status.</p>
@@ -316,17 +301,14 @@
     </div>
     {% endif %}
 
+    <!-- Infinite scroll sentinel -->
+    <div id="scroll-sentinel" class="h-8 mt-2"></div>
+    <div id="loading-indicator" class="hidden text-center py-4 text-gray-600 text-xs">Laden…</div>
+
   </div><!-- /hoofdcontent -->
 </div><!-- /flex wrapper -->
 
 <script>
-// --- Paginatie ---
-function goToPage(p) {
-  const params = new URLSearchParams(window.location.search);
-  params.set('page', p);
-  location.href = '/?' + params.toString();
-}
-
 // --- Weergave toggle ---
 function setView(v) {
   const grid = document.getElementById('view-grid');
@@ -351,13 +333,109 @@ function setView(v) {
 }
 setView(localStorage.getItem('dashboardView') || 'grid');
 
-// --- Filter persistentie ---
+// --- Archiveren ---
+async function toggleArchive(event, profileId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
+  if (resp.ok) {
+    const card = document.getElementById('card-' + profileId);
+    if (card) {
+      card.style.transition = 'opacity 0.2s';
+      card.style.opacity = '0';
+      setTimeout(() => card.remove(), 200);
+    }
+  }
+}
+
+// --- Filter wissen ---
+function clearFilters() {
+  {% if not archive_view %}
+  localStorage.removeItem('dashboardFilters');
+  {% endif %}
+  location.href = '{% if archive_view %}/archived{% else %}/{% endif %}';
+}
+
+// --- Unified fetch (instant filter + infinite scroll) ---
+const _mainEl = document.querySelector('main');
+let _page = 1;
+let _hasMore = {{ 'true' if total_pages > 1 else 'false' }};
+let _loading = false;
+let _searchTimer = null;
+
+function _currentParams(page) {
+  const fd = new FormData(document.getElementById('filter-form'));
+  const p = new URLSearchParams(fd);
+  p.set('page', page);
+  // Unchecked checkboxes aren't in FormData — explicitly set to 0
+  ['with_phone', 'with_photo', 'show_archived'].forEach(k => {
+    if (!p.has(k)) p.set(k, '0');
+  });
+  return p;
+}
+
+async function _fetchProfiles(page, replace) {
+  if (_loading) return;
+  _loading = true;
+  document.getElementById('loading-indicator').classList.remove('hidden');
+  const params = _currentParams(page);
+  try {
+    const resp = await fetch('/profiles/more?' + params.toString());
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const grid  = document.getElementById('view-grid');
+    const tbody = document.querySelector('#view-list tbody');
+    if (!grid) return;
+    if (replace) {
+      grid.innerHTML = data.grid_html;
+      if (tbody) tbody.innerHTML = data.list_html;
+      _page = 1;
+      _mainEl.scrollTo(0, 0);
+      history.pushState({}, '', window.location.pathname + '?' + params.toString());
+    } else {
+      grid.insertAdjacentHTML('beforeend', data.grid_html);
+      if (tbody) tbody.insertAdjacentHTML('beforeend', data.list_html);
+      _page = page;
+    }
+    _hasMore = data.has_more;
+  } catch(e) {}
+  finally {
+    _loading = false;
+    document.getElementById('loading-indicator').classList.add('hidden');
+  }
+}
+
+// Instant filter — intercept form submit
+document.getElementById('filter-form').addEventListener('submit', e => {
+  e.preventDefault();
+  _fetchProfiles(1, true);
+});
+
+// Instant filter — select + checkbox changes
+document.querySelectorAll('#filter-form select, #filter-form input[type=checkbox]')
+  .forEach(el => el.addEventListener('change', () => _fetchProfiles(1, true)));
+
+// Debounced text search
+document.getElementById('inp-q').addEventListener('input', () => {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => _fetchProfiles(1, true), 400);
+});
+
+// Infinite scroll via IntersectionObserver on the scrollable <main>
+new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && _hasMore && !_loading) {
+    _fetchProfiles(_page + 1, false);
+  }
+}, { root: _mainEl, rootMargin: '200px' }).observe(document.getElementById('scroll-sentinel'));
+
+{% if not archive_view %}
+// --- Filter persistentie (alleen op hoofdpagina) ---
 const FILTER_KEY = 'dashboardFilters';
 
 document.getElementById('filter-form').addEventListener('submit', () => {
   const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return el && el.checked ? '1' : ''; };
-  const f = {
+  localStorage.setItem(FILTER_KEY, JSON.stringify({
     q: val('inp-q'),
     gender: val('inp-gender'),
     province: val('inp-province'),
@@ -369,8 +447,7 @@ document.getElementById('filter-form').addEventListener('submit', () => {
     with_phone: chk('inp-phone'),
     with_photo: chk('inp-photo'),
     show_archived: chk('inp-archived'),
-  };
-  localStorage.setItem(FILTER_KEY, JSON.stringify(f));
+  }));
 });
 
 // Auto-redirect op kale /
@@ -400,26 +477,7 @@ if (!hasUrlFilters && !hasActive) {
     }
   } catch(e) {}
 }
-
-function clearFilters() {
-  localStorage.removeItem(FILTER_KEY);
-  location.href = '/';
-}
-
-// --- Archiveren ---
-async function toggleArchive(event, profileId) {
-  event.preventDefault();
-  event.stopPropagation();
-  const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
-  if (resp.ok) {
-    const card = document.getElementById('card-' + profileId);
-    if (card) {
-      card.style.transition = 'opacity 0.2s';
-      card.style.opacity = '0';
-      setTimeout(() => card.remove(), 200);
-    }
-  }
-}
+{% endif %}
 </script>
 
 {% endblock %}

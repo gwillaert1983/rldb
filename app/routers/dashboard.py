@@ -1,9 +1,9 @@
 import json
+import math
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
-
 from sqlalchemy import exists
 
 from app.dependencies import get_db, require_login
@@ -182,6 +182,104 @@ router = APIRouter()
 PAGE_SIZE = 24
 
 
+def _build_profile_query(db, q, gender, location, province, nationality, language,
+                          ad_category, ad_location, with_phone, with_photo,
+                          show_archived=False, archived_only=False):
+    query = db.query(Profile).filter(Profile.is_active == True)
+    if archived_only:
+        query = query.filter(Profile.is_archived == True)
+    elif not show_archived:
+        query = query.filter(Profile.is_archived != True)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            Profile.username.ilike(like)
+            | Profile.display_name.ilike(like)
+            | Profile.location.ilike(like)
+            | Profile.phone.ilike(like)
+            | Profile.extra_data.ilike(like)
+        )
+    if gender:
+        query = query.filter(Profile.extra_data.contains(f'"gender": "{gender}"'))
+    if province and province in PROVINCE_CITIES:
+        query = query.filter(Profile.location.in_(PROVINCE_CITIES[province]))
+    elif location:
+        query = query.filter(Profile.location == location)
+    if nationality:
+        query = query.filter(Profile.extra_data.ilike(f'%"nationality": "{nationality}"%'))
+    if language:
+        query = query.filter(Profile.extra_data.ilike(f'%"languages": "%{language}%"'))
+    if ad_category:
+        query = query.filter(
+            exists().where(
+                Advertisement.profile_id == Profile.id,
+                Advertisement.category == ad_category,
+                Advertisement.is_active == True,
+            )
+        )
+    if ad_location:
+        query = query.filter(
+            exists().where(
+                Advertisement.profile_id == Profile.id,
+                Advertisement.location == ad_location,
+                Advertisement.is_active == True,
+            )
+        )
+    if with_phone:
+        query = query.filter(Profile.phone.isnot(None), Profile.phone != "")
+    if with_photo:
+        query = query.filter(Profile.photos.any())
+    return query
+
+
+def _dropdown_values(db, archived_only=False):
+    """Return distinct filter dropdown values, optionally scoped to archived profiles."""
+    base_filter = [Profile.is_active == True]
+    if archived_only:
+        base_filter.append(Profile.is_archived == True)
+
+    distinct_locations = [
+        row[0]
+        for row in db.query(Profile.location)
+        .filter(*base_filter, Profile.location.isnot(None), Profile.location != "")
+        .distinct()
+        .order_by(Profile.location)
+        .all()
+    ]
+    location_set = set(distinct_locations)
+    distinct_provinces = [
+        prov for prov, cities in PROVINCE_CITIES.items()
+        if any(c in location_set for c in cities)
+    ]
+
+    _nationalities: set[str] = set()
+    _languages: set[str] = set()
+    for (ed,) in (
+        db.query(Profile.extra_data)
+        .filter(*base_filter, Profile.extra_data.isnot(None), Profile.extra_data != "")
+        .all()
+    ):
+        try:
+            d = json.loads(ed)
+            if d.get("nationality"):
+                _nationalities.add(str(d["nationality"]).strip())
+            if d.get("languages"):
+                langs = d["languages"]
+                if isinstance(langs, list):
+                    _languages.update(l.strip() for l in langs if l.strip())
+                else:
+                    _languages.update(l.strip() for l in str(langs).split(",") if l.strip())
+        except Exception:
+            pass
+
+    return {
+        "distinct_locations": distinct_locations,
+        "distinct_provinces": distinct_provinces,
+        "distinct_nationalities": sorted(_nationalities),
+        "distinct_languages": sorted(_languages),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 async def profile_list(
     request: Request,
@@ -203,40 +301,7 @@ async def profile_list(
     if isinstance(user, RedirectResponse):
         return user
 
-    # Distinct values for filter dropdowns — only show what exists in DB
-    distinct_locations = [
-        row[0]
-        for row in db.query(Profile.location)
-        .filter(Profile.location.isnot(None), Profile.location != "")
-        .distinct()
-        .order_by(Profile.location)
-        .all()
-    ]
-
-    # Only show provinces that have at least one matching profile in DB
-    location_set = set(distinct_locations)
-    distinct_provinces = [
-        prov for prov, cities in PROVINCE_CITIES.items()
-        if any(c in location_set for c in cities)
-    ]
-
-    _nationalities: set[str] = set()
-    _languages: set[str] = set()
-    for (ed,) in db.query(Profile.extra_data).filter(Profile.extra_data.isnot(None), Profile.extra_data != "").all():
-        try:
-            d = json.loads(ed)
-            if d.get("nationality"):
-                _nationalities.add(str(d["nationality"]).strip())
-            if d.get("languages"):
-                langs = d["languages"]
-                if isinstance(langs, list):
-                    _languages.update(l.strip() for l in langs if l.strip())
-                else:
-                    _languages.update(l.strip() for l in str(langs).split(",") if l.strip())
-        except Exception:
-            pass
-    distinct_nationalities = sorted(_nationalities)
-    distinct_languages = sorted(_languages)
+    dropdowns = _dropdown_values(db)
 
     # Distinct ad locations (active ads only)
     distinct_ad_locations = [
@@ -248,7 +313,6 @@ async def profile_list(
         .all()
     ]
 
-    # Ad categories actually present in DB
     _ALL_AD_CATEGORIES = ["escort", "massage", "prive-ontvangst", "shemale"]
     _present_cats = {
         row[0]
@@ -259,59 +323,11 @@ async def profile_list(
     }
     distinct_ad_categories = [c for c in _ALL_AD_CATEGORIES if c in _present_cats]
 
-    query = db.query(Profile).filter(Profile.is_active == True)
-
-    if not show_archived:
-        query = query.filter(Profile.is_archived != True)
-
-    if q:
-        like = f"%{q}%"
-        query = query.filter(
-            Profile.username.ilike(like)
-            | Profile.display_name.ilike(like)
-            | Profile.location.ilike(like)
-            | Profile.phone.ilike(like)
-            | Profile.extra_data.ilike(like)
-        )
-
-    if gender:
-        query = query.filter(Profile.extra_data.contains(f'"gender": "{gender}"'))
-
-    if province and province in PROVINCE_CITIES:
-        query = query.filter(Profile.location.in_(PROVINCE_CITIES[province]))
-    elif location:
-        query = query.filter(Profile.location == location)
-
-    if nationality:
-        query = query.filter(Profile.extra_data.ilike(f'%"nationality": "{nationality}"%'))
-
-    if language:
-        query = query.filter(Profile.extra_data.ilike(f'%"languages": "%{language}%"'))
-
-    if ad_category:
-        query = query.filter(
-            exists().where(
-                Advertisement.profile_id == Profile.id,
-                Advertisement.category == ad_category,
-                Advertisement.is_active == True,
-            )
-        )
-
-    if ad_location:
-        query = query.filter(
-            exists().where(
-                Advertisement.profile_id == Profile.id,
-                Advertisement.location == ad_location,
-                Advertisement.is_active == True,
-            )
-        )
-
-    if with_phone:
-        query = query.filter(Profile.phone.isnot(None), Profile.phone != "")
-
-    if with_photo:
-        query = query.filter(Profile.photos.any())
-
+    query = _build_profile_query(
+        db, q, gender, location, province, nationality, language,
+        ad_category, ad_location, with_phone, with_photo,
+        show_archived=bool(show_archived),
+    )
     total = query.count()
     profiles = (
         query.order_by(Profile.last_scraped.desc())
@@ -319,7 +335,7 @@ async def profile_list(
         .limit(PAGE_SIZE)
         .all()
     )
-    total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    total_pages = math.ceil(total / PAGE_SIZE) if total else 1
     filters_active = bool(
         gender or location or province or nationality or language
         or ad_category or ad_location
@@ -341,20 +357,126 @@ async def profile_list(
             "province": province,
             "nationality": nationality,
             "language": language,
-            "distinct_locations": distinct_locations,
-            "distinct_provinces": distinct_provinces,
-            "distinct_nationalities": distinct_nationalities,
-            "distinct_languages": distinct_languages,
-            "distinct_ad_categories": distinct_ad_categories,
-            "distinct_ad_locations": distinct_ad_locations,
             "ad_category": ad_category,
             "ad_location": ad_location,
             "with_phone": with_phone,
             "with_photo": with_photo,
             "show_archived": show_archived,
             "filters_active": filters_active,
+            "archive_view": False,
+            **dropdowns,
+            "distinct_ad_categories": distinct_ad_categories,
+            "distinct_ad_locations": distinct_ad_locations,
         },
     )
+
+
+@router.get("/archived", response_class=HTMLResponse)
+async def archived_list(
+    request: Request,
+    page: int = Query(1, ge=1),
+    q: str = Query(""),
+    gender: str = Query(""),
+    location: str = Query(""),
+    nationality: str = Query(""),
+    language: str = Query(""),
+    province: str = Query(""),
+    with_phone: int = Query(0),
+    with_photo: int = Query(0),
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    dropdowns = _dropdown_values(db, archived_only=True)
+
+    query = _build_profile_query(
+        db, q, gender, location, province, nationality, language,
+        "", "", with_phone, with_photo, archived_only=True,
+    )
+    total = query.count()
+    profiles = (
+        query.order_by(Profile.last_scraped.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    total_pages = math.ceil(total / PAGE_SIZE) if total else 1
+    filters_active = bool(
+        gender or location or province or nationality or language
+        or with_phone or with_photo
+    )
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "profiles": profiles,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "page_size": PAGE_SIZE,
+            "q": q,
+            "gender": gender,
+            "location": location,
+            "province": province,
+            "nationality": nationality,
+            "language": language,
+            "ad_category": "",
+            "ad_location": "",
+            "with_phone": with_phone,
+            "with_photo": with_photo,
+            "show_archived": 0,
+            "filters_active": filters_active,
+            "archive_view": True,
+            **dropdowns,
+            "distinct_ad_categories": [],
+            "distinct_ad_locations": [],
+        },
+    )
+
+
+@router.get("/profiles/more", response_class=JSONResponse)
+async def profiles_more(
+    request: Request,
+    page: int = Query(1, ge=1),
+    q: str = Query(""),
+    gender: str = Query(""),
+    location: str = Query(""),
+    nationality: str = Query(""),
+    language: str = Query(""),
+    province: str = Query(""),
+    ad_category: str = Query(""),
+    ad_location: str = Query(""),
+    with_phone: int = Query(0),
+    with_photo: int = Query(0),
+    show_archived: int = Query(0),
+    archived_only: int = Query(0),
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    query = _build_profile_query(
+        db, q, gender, location, province, nationality, language,
+        ad_category, ad_location, with_phone, with_photo,
+        show_archived=bool(show_archived), archived_only=bool(archived_only),
+    )
+    total = query.count()
+    profiles = (
+        query.order_by(Profile.last_scraped.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    has_more = page * PAGE_SIZE < total
+
+    grid_html = templates.env.get_template("_grid_cards.html").render(profiles=profiles)
+    list_html = templates.env.get_template("_list_rows.html").render(profiles=profiles)
+
+    return JSONResponse({"grid_html": grid_html, "list_html": list_html, "has_more": has_more})
 
 
 @router.get("/profile/{profile_id}", response_class=HTMLResponse)
@@ -383,7 +505,7 @@ async def profile_detail(
         services = {}
 
     whatsapp = raw_extra.pop("whatsapp", "")
-    raw_extra.pop("ad_url", "")  # no longer needed; shown via advertisements relationship
+    raw_extra.pop("ad_url", "")
 
     extra = {EXTRA_LABELS[k]: v for k, v in raw_extra.items() if k in EXTRA_LABELS and v}
 

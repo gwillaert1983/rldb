@@ -1,0 +1,31 @@
+{% for profile in profiles %}
+{% set ex = profile.extra_data | from_json %}
+<tr id="card-{{ profile.id }}"
+    class="border-b border-gray-800/50 hover:bg-gray-800/30 transition cursor-pointer"
+    onclick="location.href='/profile/{{ profile.id }}'">
+  <td class="pl-3 py-2">
+    {% if profile.photos %}
+    <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+         alt="{{ profile.display_name or profile.username }}"
+         class="w-9 h-11 object-cover rounded-lg">
+    {% else %}
+    <div class="w-9 h-11 bg-gray-800 rounded-lg"></div>
+    {% endif %}
+  </td>
+  <td class="px-3 py-2">
+    <div class="text-white text-sm font-medium leading-snug">{{ profile.display_name or profile.username or '—' }}</div>
+  </td>
+  <td class="px-3 py-2 text-gray-400 text-xs">{{ ex.get('age', '—') }}</td>
+  <td class="px-3 py-2 text-gray-400 text-xs truncate max-w-[90px]">{{ ex.get('nationality', '—') }}</td>
+  <td class="px-3 py-2 text-gray-400 text-xs">{{ profile.location or '—' }}</td>
+  <td class="px-3 py-2 text-gray-400 font-mono text-xs">{{ profile.phone or '—' }}</td>
+  <td class="px-3 py-2 text-right text-gray-600 text-xs">
+    {{ profile.last_scraped.strftime('%d/%m/%y') if profile.last_scraped else '—' }}
+  </td>
+  <td class="px-2 py-2 text-center">
+    <button onclick="toggleArchive(event, '{{ profile.id }}')"
+            class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
+            title="Archiveren">✕</button>
+  </td>
+</tr>
+{% endfor %}

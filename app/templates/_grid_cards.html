@@ -1,0 +1,35 @@
+{% for profile in profiles %}
+<a href="/profile/{{ profile.id }}"
+   id="card-{{ profile.id }}"
+   class="relative group bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-600 hover:shadow-lg hover:shadow-black/30 transition">
+  {% if profile.photos %}
+  <div class="aspect-[3/4] overflow-hidden bg-gray-800">
+    <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+         alt="{{ profile.display_name or profile.username }}"
+         class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+         loading="lazy">
+  </div>
+  {% else %}
+  <div class="aspect-[3/4] bg-gray-800 flex items-center justify-center">
+    <span class="text-gray-700 text-xs">—</span>
+  </div>
+  {% endif %}
+  <div class="p-2">
+    <div class="font-medium text-xs text-white truncate leading-snug">
+      {{ profile.display_name or profile.username or '—' }}
+    </div>
+    {% set ex = profile.extra_data | from_json %}
+    <div class="text-xs text-gray-500 truncate mt-0.5 leading-snug">
+      {{ ex.get('age', '') }}{% if ex.get('age') and ex.get('nationality') %} · {% endif %}{{ ex.get('nationality', '') }}
+    </div>
+    {% if profile.location %}
+    <div class="text-xs text-gray-600 truncate leading-snug">{{ profile.location }}</div>
+    {% endif %}
+  </div>
+  <button onclick="toggleArchive(event, '{{ profile.id }}')"
+          class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
+                 bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                 text-gray-500 hover:text-orange-400 text-xs leading-none"
+          title="Archiveren">✕</button>
+</a>
+{% endfor %}
