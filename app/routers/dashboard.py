@@ -1,5 +1,6 @@
 import json
 import math
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import exists
 
 from app.dependencies import get_db, require_login
-from app.models import Advertisement, Profile
+from app.models import Advertisement, Profile, ScrapeRun
 from app.templates_config import templates
 
 # Comprehensive Belgian municipality → province mapping
@@ -184,7 +185,8 @@ PAGE_SIZE = 24
 
 def _build_profile_query(db, q, gender, location, province, nationality, language,
                           ad_category, ad_location, with_phone, with_photo,
-                          show_archived=False, archived_only=False):
+                          show_archived=False, archived_only=False,
+                          run_id="", run_filter=""):
     query = db.query(Profile).filter(Profile.is_active == True)
     if archived_only:
         query = query.filter(Profile.is_archived == True)
@@ -229,6 +231,21 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
         query = query.filter(Profile.phone.isnot(None), Profile.phone != "")
     if with_photo:
         query = query.filter(Profile.photos.any())
+    if run_id:
+        scrape_run = db.query(ScrapeRun).filter(ScrapeRun.id == run_id).first()
+        if scrape_run:
+            run_end = scrape_run.finished_at or datetime.utcnow()
+            if run_filter == "new":
+                query = query.filter(
+                    Profile.first_seen >= scrape_run.started_at,
+                    Profile.first_seen <= run_end,
+                )
+            elif run_filter == "updated":
+                query = query.filter(
+                    Profile.last_changed >= scrape_run.started_at,
+                    Profile.last_changed <= run_end,
+                    Profile.first_seen < scrape_run.started_at,
+                )
     return query
 
 
@@ -295,6 +312,8 @@ async def profile_list(
     with_phone: int = Query(0),
     with_photo: int = Query(0),
     show_archived: int = Query(0),
+    run_id: str = Query(""),
+    run_filter: str = Query(""),
     db: Session = Depends(get_db),
     user=Depends(require_login),
 ):
@@ -323,10 +342,13 @@ async def profile_list(
     }
     distinct_ad_categories = [c for c in _ALL_AD_CATEGORIES if c in _present_cats]
 
+    run_context = db.query(ScrapeRun).filter(ScrapeRun.id == run_id).first() if run_id else None
+
     query = _build_profile_query(
         db, q, gender, location, province, nationality, language,
         ad_category, ad_location, with_phone, with_photo,
         show_archived=bool(show_archived),
+        run_id=run_id, run_filter=run_filter,
     )
     total = query.count()
     profiles = (
@@ -364,6 +386,9 @@ async def profile_list(
             "show_archived": show_archived,
             "filters_active": filters_active,
             "archive_view": False,
+            "run_id": run_id,
+            "run_filter": run_filter,
+            "run_context": run_context,
             **dropdowns,
             "distinct_ad_categories": distinct_ad_categories,
             "distinct_ad_locations": distinct_ad_locations,
@@ -430,6 +455,9 @@ async def archived_list(
             "show_archived": 0,
             "filters_active": filters_active,
             "archive_view": True,
+            "run_id": "",
+            "run_filter": "",
+            "run_context": None,
             **dropdowns,
             "distinct_ad_categories": [],
             "distinct_ad_locations": [],
@@ -453,6 +481,8 @@ async def profiles_more(
     with_photo: int = Query(0),
     show_archived: int = Query(0),
     archived_only: int = Query(0),
+    run_id: str = Query(""),
+    run_filter: str = Query(""),
     db: Session = Depends(get_db),
     user=Depends(require_login),
 ):
@@ -463,6 +493,7 @@ async def profiles_more(
         db, q, gender, location, province, nationality, language,
         ad_category, ad_location, with_phone, with_photo,
         show_archived=bool(show_archived), archived_only=bool(archived_only),
+        run_id=run_id, run_filter=run_filter,
     )
     total = query.count()
     profiles = (
@@ -549,3 +580,57 @@ async def toggle_archive(
     profile.is_archived = not bool(profile.is_archived)
     db.commit()
     return JSONResponse({"is_archived": profile.is_archived})
+
+
+@router.post("/profile/{profile_id}/delete")
+async def delete_profile(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    db.delete(profile)
+    db.commit()
+    return JSONResponse({"deleted": True})
+
+
+@router.post("/profiles/bulk-delete")
+async def bulk_delete_profiles(
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    body = await request.json()
+    ids = body.get("ids", [])
+    if not ids:
+        return JSONResponse({"deleted": 0})
+    for p in db.query(Profile).filter(Profile.id.in_(ids)).all():
+        db.delete(p)
+    db.commit()
+    return JSONResponse({"deleted": len(ids)})
+
+
+@router.post("/profiles/bulk-restore")
+async def bulk_restore_profiles(
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    body = await request.json()
+    ids = body.get("ids", [])
+    if not ids:
+        return JSONResponse({"restored": 0})
+    count = 0
+    for p in db.query(Profile).filter(Profile.id.in_(ids)).all():
+        p.is_archived = False
+        count += 1
+    db.commit()
+    return JSONResponse({"restored": count})

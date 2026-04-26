@@ -20,12 +20,23 @@
   <td class="px-3 py-2 text-gray-400 text-xs">{{ profile.location or '—' }}</td>
   <td class="px-3 py-2 text-gray-400 font-mono text-xs">{{ profile.phone or '—' }}</td>
   <td class="px-3 py-2 text-right text-gray-600 text-xs">
-    {{ profile.last_scraped.strftime('%d/%m/%y') if profile.last_scraped else '—' }}
+    {{ profile.last_scraped | to_local('%d/%m/%y') if profile.last_scraped else '—' }}
   </td>
-  <td class="px-2 py-2 text-center">
-    <button onclick="toggleArchive(event, '{{ profile.id }}')"
+  <td class="px-2 py-2 text-center" onclick="event.stopPropagation()">
+    {% if profile.is_archived %}
+    <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer mr-1"
+           data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
+    <button onclick="restoreProfile(event, '{{ profile.id }}')"
+            class="text-blue-500 hover:text-blue-400 transition text-sm leading-none mr-0.5"
+            title="Herstellen">↩</button>
+    <button onclick="deleteProfile(event, '{{ profile.id }}')"
+            class="text-gray-600 hover:text-red-400 transition text-sm leading-none"
+            title="Verwijderen">🗑</button>
+    {% else %}
+    <button onclick="archiveProfile(event, '{{ profile.id }}')"
             class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
             title="Archiveren">✕</button>
+    {% endif %}
   </td>
 </tr>
 {% endfor %}

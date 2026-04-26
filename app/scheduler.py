@@ -70,6 +70,15 @@ def stop_scrape():
     _stop_event.set()
 
 
+def get_next_run_time() -> str | None:
+    import pytz
+    job = _scheduler.get_job("scrape_job")
+    if job is None or job.next_run_time is None:
+        return None
+    tz = pytz.timezone("Europe/Brussels")
+    return job.next_run_time.astimezone(tz).strftime("%d/%m/%Y %H:%M")
+
+
 def run_scrape_job():
     asyncio.run(_async_scrape_job())
 

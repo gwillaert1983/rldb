@@ -1,3 +1,4 @@
+import pytz
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
@@ -17,6 +18,16 @@ def _fmt_bytes(b: int) -> str:
         return f"{b / 1024 ** 2:.1f} MB"
     return f"{b / 1024 ** 3:.2f} GB"
 
+
+def _utc_to_local(dt) -> str | None:
+    if dt is None:
+        return None
+    tz = pytz.timezone("Europe/Brussels")
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(tz).strftime("%d/%m/%Y %H:%M")
+
+
 router = APIRouter()
 
 
@@ -29,7 +40,7 @@ async def status_page(
     if isinstance(user, RedirectResponse):
         return user
 
-    from app.scheduler import scrape_is_running
+    from app.scheduler import get_next_run_time, scrape_is_running
 
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
@@ -48,6 +59,7 @@ async def status_page(
             "last_run": last_run,
             "recent_runs": recent_runs,
             "is_running": scrape_is_running(),
+            "next_run_time": get_next_run_time(),
         },
     )
 
@@ -60,7 +72,7 @@ async def status_data(
     if isinstance(user, RedirectResponse):
         return user
 
-    from app.scheduler import scrape_is_running
+    from app.scheduler import get_next_run_time, scrape_is_running
 
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
@@ -76,7 +88,7 @@ async def status_data(
         return {
             "id": r.id,
             "status": r.status.value,
-            "started_at": r.started_at.strftime("%d/%m/%Y %H:%M"),
+            "started_at": _utc_to_local(r.started_at),
             "duration": duration,
             "profiles_found": r.profiles_found or 0,
             "profiles_processed": r.profiles_processed or 0,
@@ -94,6 +106,7 @@ async def status_data(
         "runs_count": len(recent_runs),
         "last_run": fmt_run(last_run) if last_run else None,
         "recent_runs": [fmt_run(r) for r in recent_runs],
+        "next_run_time": get_next_run_time(),
     })
 
 

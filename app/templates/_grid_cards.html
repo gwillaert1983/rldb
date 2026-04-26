@@ -26,10 +26,27 @@
     <div class="text-xs text-gray-600 truncate leading-snug">{{ profile.location }}</div>
     {% endif %}
   </div>
-  <button onclick="toggleArchive(event, '{{ profile.id }}')"
+  {% if profile.is_archived %}
+  <label onclick="event.stopPropagation()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
+    <input type="checkbox" class="profile-checkbox w-4 h-4 accent-blue-500 cursor-pointer"
+           data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
+  </label>
+  <div class="absolute top-1.5 right-1.5 flex gap-1">
+    <button onclick="restoreProfile(event, '{{ profile.id }}')"
+            class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                   text-blue-400 hover:text-blue-300 text-xs leading-none transition"
+            title="Herstellen">↩</button>
+    <button onclick="deleteProfile(event, '{{ profile.id }}')"
+            class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                   text-gray-500 hover:text-red-400 text-xs leading-none transition"
+            title="Verwijderen">🗑</button>
+  </div>
+  {% else %}
+  <button onclick="archiveProfile(event, '{{ profile.id }}')"
           class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                  bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
                  text-gray-500 hover:text-orange-400 text-xs leading-none"
           title="Archiveren">✕</button>
+  {% endif %}
 </a>
 {% endfor %}

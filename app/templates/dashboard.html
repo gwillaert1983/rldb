@@ -13,6 +13,10 @@
       {% if archive_view %}
       <input type="hidden" name="archived_only" value="1">
       {% endif %}
+      {% if run_id is defined and run_id %}
+      <input type="hidden" name="run_id" value="{{ run_id }}">
+      <input type="hidden" name="run_filter" value="{{ run_filter }}">
+      {% endif %}
 
       <!-- Zoekbalk -->
       <div class="mb-3">
@@ -171,11 +175,16 @@
 
     <!-- Header: teller + weergave-toggle -->
     <div class="flex items-center justify-between mb-4">
-      <span class="text-gray-500 text-sm">
+      <span class="text-gray-500 text-sm flex items-center gap-3">
         {% if archive_view %}
         Archief — {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% else %}
         {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% endif %}
+        {% if archive_view and total %}
+        <button onclick="selectAllVisible()" class="text-xs text-gray-600 hover:text-blue-400 transition">
+          Alles selecteren
+        </button>
         {% endif %}
       </span>
       <div class="flex rounded-lg overflow-hidden border border-gray-800 shrink-0">
@@ -189,6 +198,16 @@
         </button>
       </div>
     </div>
+
+    {% if run_id is defined and run_id and run_context is defined and run_context %}
+    <div class="mb-3 flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm">
+      <span class="text-gray-400">
+        {% if run_filter == 'new' %}Nieuwe profielen{% else %}Gewijzigde profielen{% endif %}
+        van run <span class="text-white">{{ run_context.started_at | to_local }}</span>
+      </span>
+      <a href="/" class="ml-auto text-gray-600 hover:text-gray-300 text-xs transition">✕ Sluiten</a>
+    </div>
+    {% endif %}
 
     {% if profiles %}
 
@@ -222,11 +241,28 @@
           <div class="text-xs text-gray-600 truncate leading-snug">{{ profile.location }}</div>
           {% endif %}
         </div>
-        <button onclick="toggleArchive(event, '{{ profile.id }}')"
+        {% if profile.is_archived %}
+        <label onclick="event.stopPropagation()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">
+          <input type="checkbox" class="profile-checkbox w-4 h-4 accent-blue-500 cursor-pointer"
+                 data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
+        </label>
+        <div class="absolute top-1.5 right-1.5 flex gap-1">
+          <button onclick="restoreProfile(event, '{{ profile.id }}')"
+                  class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                         text-blue-400 hover:text-blue-300 text-xs leading-none transition"
+                  title="Herstellen">↩</button>
+          <button onclick="deleteProfile(event, '{{ profile.id }}')"
+                  class="bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                         text-gray-500 hover:text-red-400 text-xs leading-none transition"
+                  title="Verwijderen">🗑</button>
+        </div>
+        {% else %}
+        <button onclick="archiveProfile(event, '{{ profile.id }}')"
                 class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                        bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
                        text-gray-500 hover:text-orange-400 text-xs leading-none"
                 title="Archiveren">✕</button>
+        {% endif %}
       </a>
       {% endfor %}
     </div>
@@ -270,12 +306,23 @@
               <td class="px-3 py-2 text-gray-400 text-xs">{{ profile.location or '—' }}</td>
               <td class="px-3 py-2 text-gray-400 font-mono text-xs">{{ profile.phone or '—' }}</td>
               <td class="px-3 py-2 text-right text-gray-600 text-xs">
-                {{ profile.last_scraped.strftime('%d/%m/%y') if profile.last_scraped else '—' }}
+                {{ profile.last_scraped | to_local('%d/%m/%y') if profile.last_scraped else '—' }}
               </td>
-              <td class="px-2 py-2 text-center">
-                <button onclick="toggleArchive(event, '{{ profile.id }}')"
+              <td class="px-2 py-2 text-center" onclick="event.stopPropagation()">
+                {% if profile.is_archived %}
+                <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer mr-1"
+                       data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
+                <button onclick="restoreProfile(event, '{{ profile.id }}')"
+                        class="text-blue-500 hover:text-blue-400 transition text-sm leading-none mr-0.5"
+                        title="Herstellen">↩</button>
+                <button onclick="deleteProfile(event, '{{ profile.id }}')"
+                        class="text-gray-600 hover:text-red-400 transition text-sm leading-none"
+                        title="Verwijderen">🗑</button>
+                {% else %}
+                <button onclick="archiveProfile(event, '{{ profile.id }}')"
                         class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
                         title="Archiveren">✕</button>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -308,6 +355,24 @@
   </div><!-- /hoofdcontent -->
 </div><!-- /flex wrapper -->
 
+<!-- Multi-select actiebalk -->
+<div id="selection-bar"
+     class="hidden fixed bottom-6 left-1/2 -translate-x-1/2
+            bg-gray-900 border border-gray-700 rounded-xl shadow-2xl shadow-black/50
+            px-5 py-3 flex items-center gap-3 z-40 whitespace-nowrap">
+  <span id="selection-count" class="text-sm text-white font-medium"></span>
+  <button onclick="restoreSelected()"
+          class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+    ↩ Herstellen
+  </button>
+  <button onclick="deleteSelected()"
+          class="bg-red-900/60 hover:bg-red-800 border border-red-800/60 text-red-300
+                 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+    🗑 Verwijderen
+  </button>
+  <button onclick="clearSelection()" class="text-gray-500 hover:text-gray-300 transition text-xs ml-1">✕</button>
+</div>
+
 <script>
 // --- Weergave toggle ---
 function setView(v) {
@@ -333,18 +398,97 @@ function setView(v) {
 }
 setView(localStorage.getItem('dashboardView') || 'grid');
 
-// --- Archiveren ---
-async function toggleArchive(event, profileId) {
+// --- Archiveren / herstellen / verwijderen ---
+function _removeCard(profileId) {
+  const card = document.getElementById('card-' + profileId);
+  if (card) {
+    card.style.transition = 'opacity 0.2s';
+    card.style.opacity = '0';
+    setTimeout(() => { card.remove(); selectedIds.delete(profileId); updateSelectionBar(); }, 200);
+  }
+}
+
+async function archiveProfile(event, profileId) {
   event.preventDefault();
   event.stopPropagation();
   const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
+  if (resp.ok) _removeCard(profileId);
+}
+
+async function restoreProfile(event, profileId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
+  if (resp.ok) _removeCard(profileId);
+}
+
+async function deleteProfile(event, profileId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const resp = await fetch('/profile/' + profileId + '/delete', { method: 'POST' });
+  if (resp.ok) _removeCard(profileId);
+}
+
+// --- Multi-select ---
+const selectedIds = new Set();
+
+function toggleSelect(profileId, checked) {
+  if (checked) selectedIds.add(profileId);
+  else selectedIds.delete(profileId);
+  updateSelectionBar();
+}
+
+function updateSelectionBar() {
+  const bar = document.getElementById('selection-bar');
+  const countEl = document.getElementById('selection-count');
+  if (!bar) return;
+  if (selectedIds.size > 0) {
+    bar.classList.remove('hidden');
+    countEl.textContent = selectedIds.size + ' geselecteerd';
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('.profile-checkbox').forEach(cb => cb.checked = false);
+  updateSelectionBar();
+}
+
+function selectAllVisible() {
+  document.querySelectorAll('.profile-checkbox').forEach(cb => {
+    cb.checked = true;
+    toggleSelect(cb.dataset.id, true);
+  });
+}
+
+async function deleteSelected() {
+  if (selectedIds.size === 0) return;
+  if (!confirm('Verwijder ' + selectedIds.size + ' profiel(en) permanent? Dit kan niet ongedaan gemaakt worden.')) return;
+  const ids = [...selectedIds];
+  const resp = await fetch('/profiles/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
   if (resp.ok) {
-    const card = document.getElementById('card-' + profileId);
-    if (card) {
-      card.style.transition = 'opacity 0.2s';
-      card.style.opacity = '0';
-      setTimeout(() => card.remove(), 200);
-    }
+    ids.forEach(id => { const c = document.getElementById('card-' + id); if (c) c.remove(); selectedIds.delete(id); });
+    updateSelectionBar();
+  }
+}
+
+async function restoreSelected() {
+  if (selectedIds.size === 0) return;
+  const ids = [...selectedIds];
+  const resp = await fetch('/profiles/bulk-restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (resp.ok) {
+    ids.forEach(id => { const c = document.getElementById('card-' + id); if (c) c.remove(); selectedIds.delete(id); });
+    updateSelectionBar();
   }
 }
 
