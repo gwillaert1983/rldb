@@ -125,6 +125,8 @@ class Visit(Base):
     profile_id  = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     visited_at  = Column(DateTime, nullable=False)
     amount      = Column(Float, nullable=True)
+    hotel_cost  = Column(Float, nullable=True)
+    extra_cost  = Column(Float, nullable=True)
     note        = Column(Text, nullable=True)
 
     profile = relationship("Profile", back_populates="visits")

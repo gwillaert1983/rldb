@@ -98,6 +98,7 @@
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Nieuw</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Geüpdated</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Overgeslagen</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Ongewijzigd</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Foto's</th>
         <th class="text-right text-xs text-gray-500 font-normal px-4 py-3">Duur</th>
       </tr>
@@ -105,15 +106,36 @@
     <tbody id="runs-tbody">
       {% for group in runs_by_day %}
       {% set gid = 'day-' ~ loop.index %}
+      {# Pre-compute day totals #}
+      {% set ns = namespace(found=0, new=0, updated=0, skipped=0, ongew=0, photos=0) %}
+      {% for run in group.runs %}
+        {% set ns.found   = ns.found   + (run.profiles_found or 0) %}
+        {% set ns.new     = ns.new     + (run.profiles_new or 0) %}
+        {% set ns.updated = ns.updated + (run.profiles_updated or 0) %}
+        {% set ns.skipped = ns.skipped + (run.profiles_skipped or 0) %}
+        {% set ns.photos  = ns.photos  + (run.photos_downloaded or 0) %}
+        {% set _proc = run.profiles_processed or 0 %}
+        {% set _ongew = _proc - (run.profiles_new or 0) - (run.profiles_updated or 0) - (run.profiles_skipped or 0) %}
+        {% set ns.ongew = ns.ongew + ([0, _ongew] | max) %}
+      {% endfor %}
       <tr class="bg-gray-800/40 hover:bg-gray-700/30 cursor-pointer select-none border-b border-gray-800/50"
           onclick="toggleDay('{{ gid }}')">
-        <td colspan="8" class="px-4 py-2 text-xs text-gray-400 font-medium">
+        <td colspan="9" class="px-4 py-2 text-xs text-gray-400 font-medium">
           <span id="{{ gid }}-arrow" class="mr-1.5 inline-block w-3">{{ '▾' if group.is_today else '▸' }}</span>
           {{ group.date }}
           <span class="text-gray-600 ml-2">{{ group.runs | length }} runs</span>
+          <span class="text-gray-700 ml-3">·</span>
+          <span class="text-gray-600 ml-3">{{ ns.found }} gevonden</span>
+          {% if ns.new %}<span class="text-green-700 ml-2">{{ ns.new }} nieuw</span>{% endif %}
+          {% if ns.updated %}<span class="text-blue-700 ml-2">{{ ns.updated }} upd</span>{% endif %}
+          {% if ns.skipped %}<span class="text-gray-600 ml-2">{{ ns.skipped }} skip</span>{% endif %}
+          {% if ns.ongew %}<span class="text-gray-700 ml-2">{{ ns.ongew }} ongewijzigd</span>{% endif %}
+          {% if ns.photos %}<span class="text-gray-700 ml-2">· {{ ns.photos }} foto's</span>{% endif %}
         </td>
       </tr>
       {% for run in group.runs %}
+      {% set _proc = run.profiles_processed or 0 %}
+      {% set _ongew = [0, _proc - (run.profiles_new or 0) - (run.profiles_updated or 0) - (run.profiles_skipped or 0)] | max %}
       <tr class="{{ gid }}-row {% if not group.is_today %}hidden{% endif %} border-b border-gray-800/50 hover:bg-gray-800/20 transition"
           id="run-{{ run.id }}">
         <td class="px-4 py-2.5 text-gray-300 text-sm">{{ run.started_at | to_local('%H:%M') }}</td>
@@ -140,6 +162,7 @@
           {% else %}<span class="text-gray-600">0</span>{% endif %}
         </td>
         <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.profiles_skipped or 0 }}</td>
+        <td class="px-3 py-2.5 text-right text-gray-600 text-sm">{{ _ongew if _ongew > 0 else '—' }}</td>
         <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.photos_downloaded or 0 }}</td>
         <td class="px-4 py-2.5 text-right text-gray-500 text-xs">
           {% if run.finished_at %}
@@ -150,7 +173,7 @@
       </tr>
       {% if run.error_message %}
       <tr class="{{ gid }}-row {% if not group.is_today %}hidden{% endif %} bg-red-950/20">
-        <td colspan="8" class="px-4 py-2 text-xs text-red-400 font-mono">{{ run.error_message }}</td>
+        <td colspan="9" class="px-4 py-2 text-xs text-red-400 font-mono">{{ run.error_message }}</td>
       </tr>
       {% endif %}
       {% endfor %}
@@ -235,11 +258,13 @@ async function poll() {
       const r = d.recent_runs[0];
       const row = document.getElementById('run-' + r.id);
       if (row) {
+        const ongew = Math.max(0, (r.profiles_processed || 0) - (r.profiles_new || 0) - (r.profiles_updated || 0) - (r.profiles_skipped || 0));
         row.cells[2].textContent = r.profiles_found;
         row.cells[3].textContent = r.profiles_new;
         row.cells[4].textContent = r.profiles_updated;
         row.cells[5].textContent = r.profiles_skipped;
-        row.cells[6].textContent = r.photos_downloaded;
+        row.cells[6].textContent = ongew || '—';
+        row.cells[7].textContent = r.photos_downloaded;
       }
     }
 

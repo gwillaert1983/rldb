@@ -36,12 +36,12 @@
           class="absolute top-1.5 left-1.5 transition
                  bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
                  text-xs leading-none
-                 {{ 'text-yellow-400' if profile.is_favourite else 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-yellow-400' }}"
+                 {{ 'text-yellow-400' if profile.is_favourite else 'text-gray-400/50 hover:text-yellow-400' }}"
           title="{{ 'Verwijder uit favorieten' if profile.is_favourite else 'Toevoegen aan favorieten' }}">★</button>
   <button onclick="event.preventDefault(); archiveProfile('{{ profile.id }}')"
-          class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
+          class="absolute top-1.5 right-1.5 opacity-40 hover:opacity-100 transition
                  bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
-                 text-gray-500 hover:text-orange-400 text-xs leading-none"
+                 text-gray-400 hover:text-orange-400 text-xs leading-none"
           title="Archiveren">✕</button>
   {% endif %}
 </div>

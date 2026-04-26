@@ -186,6 +186,10 @@ PAGE_SIZE = 24
 _TZ = pytz.timezone("Europe/Brussels")
 
 
+def _visit_total(v) -> float:
+    return (v.amount or 0) + (v.hotel_cost or 0) + (v.extra_cost or 0)
+
+
 def _compute_visit_stats(db) -> dict:
     visits = db.query(Visit).all()
     if not visits:
@@ -201,7 +205,7 @@ def _compute_visit_stats(db) -> dict:
     year_start  = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
     def total(cutoff):
-        return sum(v.amount or 0 for v in visits if _dt(v) >= cutoff)
+        return sum(_visit_total(v) for v in visits if _dt(v) >= cutoff)
 
     by_month: dict = {}
     for v in visits:
@@ -209,13 +213,13 @@ def _compute_visit_stats(db) -> dict:
         key = ldt.strftime("%Y-%m")
         by_month.setdefault(key, {"label": ldt.strftime("%B %Y"), "count": 0, "total": 0.0})
         by_month[key]["count"] += 1
-        by_month[key]["total"] += v.amount or 0
+        by_month[key]["total"] += _visit_total(v)
 
     return {
         "this_week":  total(week_start),
         "this_month": total(month_start),
         "this_year":  total(year_start),
-        "all_time":   sum(v.amount or 0 for v in visits),
+        "all_time":   sum(_visit_total(v) for v in visits),
         "by_month":   [by_month[k] for k in sorted(by_month.keys(), reverse=True)][:12],
     }
 
@@ -635,7 +639,8 @@ async def visited_list(
 
     query = _build_profile_query(
         db, q, gender, location, province, nationality, language,
-        "", "", with_phone, with_photo, visited_only=True, service=service,
+        "", "", with_phone, with_photo, visited_only=True,
+        show_archived=True, service=service,
     )
     total = query.count()
     profiles = (
@@ -896,6 +901,12 @@ async def delete_profile(
     profile = db.query(Profile).filter(Profile.id == profile_id).first()
     if not profile:
         return JSONResponse({"error": "not found"}, status_code=404)
+    visit_count = db.query(Visit).filter(Visit.profile_id == profile_id).count()
+    if visit_count > 0:
+        return JSONResponse(
+            {"error": "Profiel heeft bezoeken en kan niet verwijderd worden."},
+            status_code=409,
+        )
     db.delete(profile)
     db.commit()
     return JSONResponse({"deleted": True})
@@ -956,9 +967,18 @@ async def add_visit(
             dt = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.utcnow()
         except ValueError:
             dt = datetime.utcnow()
-        amount_val = body.get("amount")
-        amount = float(amount_val) if amount_val not in (None, "", 0, "0") else None
-        visit = Visit(profile_id=profile_id, visited_at=dt, amount=amount,
+        def _parse_cost(val):
+            try:
+                v = float(val)
+                return v if v > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        amount     = _parse_cost(body.get("amount"))
+        hotel_cost = _parse_cost(body.get("hotel_cost"))
+        extra_cost = _parse_cost(body.get("extra_cost"))
+        visit = Visit(profile_id=profile_id, visited_at=dt,
+                      amount=amount, hotel_cost=hotel_cost, extra_cost=extra_cost,
                       note=body.get("note") or None)
         db.add(visit)
         profile.is_visited = True
