@@ -35,7 +35,6 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=interval),
         id="scrape_job",
         replace_existing=True,
-        next_run_time=None,
     )
     _scheduler.start()
     logger.info("Scheduler gestart. Interval: %d minuten", interval)
