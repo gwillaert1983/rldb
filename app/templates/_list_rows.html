@@ -14,6 +14,10 @@
   </td>
   <td class="px-3 py-2">
     <div class="text-white text-sm font-medium leading-snug">{{ profile.display_name or profile.username or '—' }}</div>
+    {% if visited_view is defined and visited_view and profile.visits %}
+    {% set ns = namespace(total=0) %}{% for v in profile.visits %}{% set ns.total = ns.total + (v.amount or 0) + (v.hotel_cost or 0) + (v.extra_cost or 0) %}{% endfor %}
+    {% if ns.total > 0 %}<div class="text-xs font-mono text-purple-400">€ {{ "%.0f"|format(ns.total) }}</div>{% endif %}
+    {% endif %}
   </td>
   <td class="px-3 py-2 text-gray-400 text-xs">{{ ex.get('age', '—') }}</td>
   <td class="px-3 py-2 text-gray-400 text-xs truncate max-w-[90px]">{{ ex.get('nationality', '—') }}</td>

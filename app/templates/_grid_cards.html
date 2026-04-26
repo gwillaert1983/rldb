@@ -25,6 +25,12 @@
     {% if profile.location %}
     <div class="text-xs text-gray-600 truncate leading-snug">{{ profile.location }}</div>
     {% endif %}
+    {% if visited_view is defined and visited_view and profile.visits %}
+    {% set ns = namespace(total=0) %}{% for v in profile.visits %}{% set ns.total = ns.total + (v.amount or 0) + (v.hotel_cost or 0) + (v.extra_cost or 0) %}{% endfor %}
+    {% if ns.total > 0 %}
+    <div class="text-xs font-mono text-purple-400 mt-0.5 leading-snug">€ {{ "%.0f"|format(ns.total) }}</div>
+    {% endif %}
+    {% endif %}
   </div>
   {% if profile.is_archived %}
   <label onclick="event.preventDefault()" class="absolute top-1.5 left-1.5 z-10 cursor-pointer">

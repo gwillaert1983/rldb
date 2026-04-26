@@ -812,8 +812,8 @@ async def profiles_more(
     )
     has_more = page * PAGE_SIZE < total
 
-    grid_html = templates.env.get_template("_grid_cards.html").render(profiles=profiles)
-    list_html = templates.env.get_template("_list_rows.html").render(profiles=profiles)
+    grid_html = templates.env.get_template("_grid_cards.html").render(profiles=profiles, visited_view=bool(visited_only))
+    list_html = templates.env.get_template("_list_rows.html").render(profiles=profiles, visited_view=bool(visited_only))
 
     return JSONResponse({"grid_html": grid_html, "list_html": list_html, "has_more": has_more})
 
