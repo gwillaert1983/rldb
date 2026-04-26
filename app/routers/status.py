@@ -1,4 +1,7 @@
 import pytz
+from collections import defaultdict
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
@@ -28,6 +31,21 @@ def _utc_to_local(dt) -> str | None:
     return dt.astimezone(tz).strftime("%d/%m/%Y %H:%M")
 
 
+def _group_runs_by_day(runs: list) -> list[dict]:
+    tz = pytz.timezone("Europe/Brussels")
+    today = datetime.now(tz).date()
+    groups: dict = defaultdict(list)
+    for run in runs:
+        dt = run.started_at
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        groups[dt.astimezone(tz).date()].append(run)
+    return [
+        {"date": day.strftime("%d/%m/%Y"), "is_today": day == today, "runs": groups[day]}
+        for day in sorted(groups.keys(), reverse=True)
+    ]
+
+
 router = APIRouter()
 
 
@@ -45,8 +63,9 @@ async def status_page(
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
     storage_bytes = db.query(func.sum(Photo.file_size_bytes)).scalar() or 0
-    last_run = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).first()
-    recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(20).all()
+    recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(150).all()
+    last_run = recent_runs[0] if recent_runs else None
+    runs_by_day = _group_runs_by_day(recent_runs)
 
     return templates.TemplateResponse(
         "status.html",
@@ -58,6 +77,7 @@ async def status_page(
             "storage_fmt": _fmt_bytes(storage_bytes),
             "last_run": last_run,
             "recent_runs": recent_runs,
+            "runs_by_day": runs_by_day,
             "is_running": scrape_is_running(),
             "next_run_time": get_next_run_time(),
         },
@@ -77,7 +97,7 @@ async def status_data(
     total_profiles = db.query(Profile).count()
     total_photos = db.query(Photo).count()
     storage_bytes = db.query(func.sum(Photo.file_size_bytes)).scalar() or 0
-    recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(20).all()
+    recent_runs = db.query(ScrapeRun).order_by(ScrapeRun.started_at.desc()).limit(150).all()
     last_run = recent_runs[0] if recent_runs else None
 
     def fmt_run(r):
@@ -94,6 +114,7 @@ async def status_data(
             "profiles_processed": r.profiles_processed or 0,
             "profiles_new": r.profiles_new or 0,
             "profiles_updated": r.profiles_updated or 0,
+            "profiles_skipped": r.profiles_skipped or 0,
             "photos_downloaded": r.photos_downloaded or 0,
             "error_message": r.error_message,
         }

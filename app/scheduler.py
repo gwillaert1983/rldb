@@ -184,6 +184,7 @@ async def _async_scrape_job():
                             )
                             if not _passes_filter(data.extra_data, filter_settings):
                                 logger.info("Heractivering overgeslagen (filter): %s", url)
+                                run.profiles_skipped = (run.profiles_skipped or 0) + 1
                             else:
                                 is_new, is_changed = await upsert_profile(db, data, run)
                                 reactivated = db.query(Profile).filter_by(source_url=url).first()
@@ -196,6 +197,7 @@ async def _async_scrape_job():
                                     run.profiles_updated = (run.profiles_updated or 0) + 1
                         else:
                             logger.info("Profiel gearchiveerd (zelfde tel.), overgeslagen: %s", url)
+                            run.profiles_skipped = (run.profiles_skipped or 0) + 1
                     except Exception as e:
                         logger.warning("Heractivatiecheck mislukt voor %s: %s", url, e)
                         db = _refresh_db_if_needed(db, e)
@@ -210,6 +212,7 @@ async def _async_scrape_job():
                     data = await scrape_profile(context, url)
                     if not _passes_filter(data.extra_data, filter_settings):
                         logger.info("Profiel overgeslagen (filter): %s", url)
+                        run.profiles_skipped = (run.profiles_skipped or 0) + 1
                         continue
                     # Scrape ad pages for new (unseen) ad URLs only
                     if data.ad_urls:

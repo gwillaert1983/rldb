@@ -43,6 +43,7 @@ class Profile(Base):
     is_visited     = Column(Boolean, default=False)
     visited_at     = Column(DateTime, nullable=True)
     visited_note   = Column(Text, nullable=True)
+    is_favourite   = Column(Boolean, default=False)
 
     photos = relationship(
         "Photo",
@@ -88,6 +89,7 @@ class ScrapeRun(Base):
     profiles_processed = Column(Integer, default=0)
     profiles_new       = Column(Integer, default=0)
     profiles_updated   = Column(Integer, default=0)
+    profiles_skipped   = Column(Integer, default=0)
     photos_downloaded  = Column(Integer, default=0)
     error_message      = Column(Text)
 

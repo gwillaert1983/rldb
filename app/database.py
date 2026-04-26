@@ -1,6 +1,7 @@
 import libsql_experimental as libsql
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from app.config import settings
 
 
@@ -44,7 +45,7 @@ def _make_connection():
     return _LibSQLConnection(conn)
 
 
-engine = create_engine("sqlite://", creator=_make_connection)
+engine = create_engine("sqlite://", creator=_make_connection, poolclass=NullPool)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
@@ -65,6 +66,16 @@ def init_db():
     _migrate(text("ALTER TABLE profiles ADD COLUMN is_visited BOOLEAN DEFAULT 0"))
     _migrate(text("ALTER TABLE profiles ADD COLUMN visited_at DATETIME"))
     _migrate(text("ALTER TABLE profiles ADD COLUMN visited_note TEXT"))
+    _migrate(text("ALTER TABLE scrape_runs ADD COLUMN profiles_skipped INTEGER DEFAULT 0"))
+    _migrate(text("ALTER TABLE profiles ADD COLUMN is_favourite BOOLEAN DEFAULT 0"))
+    with engine.connect() as conn:
+        conn.execute(text(
+            "UPDATE scrape_runs SET status='failed', "
+            "error_message='Onderbroken bij herstart', "
+            "finished_at=datetime('now') "
+            "WHERE status='running'"
+        ))
+        conn.commit()
 
 
 def _migrate(stmt):

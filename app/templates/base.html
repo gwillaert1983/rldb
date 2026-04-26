@@ -43,6 +43,11 @@
       Bezocht
     </a>
 
+    <a href="/favorieten" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/favorieten' %}border-yellow-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Favorieten
+    </a>
+
     <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
        {% if path == '/status' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
       Status

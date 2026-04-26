@@ -27,6 +27,9 @@
     <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer"
            data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
     {% else %}
+    <button onclick="toggleFav('{{ profile.id }}', {{ 'true' if profile.is_favourite else 'false' }})"
+            class="{{ 'text-yellow-400' if profile.is_favourite else 'text-gray-700 hover:text-yellow-400' }} transition text-sm leading-none mr-1.5"
+            title="{{ 'Verwijder uit favorieten' if profile.is_favourite else 'Toevoegen aan favorieten' }}">★</button>
     <button onclick="archiveProfile('{{ profile.id }}')"
             class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
             title="Archiveren">✕</button>

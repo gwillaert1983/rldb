@@ -32,6 +32,12 @@
            data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
   </label>
   {% else %}
+  <button onclick="event.preventDefault(); toggleFav('{{ profile.id }}', {{ 'true' if profile.is_favourite else 'false' }})"
+          class="absolute top-1.5 left-1.5 transition
+                 bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                 text-xs leading-none
+                 {{ 'text-yellow-400' if profile.is_favourite else 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-yellow-400' }}"
+          title="{{ 'Verwijder uit favorieten' if profile.is_favourite else 'Toevoegen aan favorieten' }}">★</button>
   <button onclick="event.preventDefault(); archiveProfile('{{ profile.id }}')"
           class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                  bg-black/70 rounded-full w-5 h-5 flex items-center justify-center

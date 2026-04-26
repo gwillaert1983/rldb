@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if archive_view %}Archief{% elif contacted_view %}Gecontacteerd{% elif visited_view %}Bezocht{% else %}Profielen{% endif %} — RLDB{% endblock %}
+{% block title %}{% if archive_view %}Archief{% elif contacted_view %}Gecontacteerd{% elif visited_view %}Bezocht{% elif favourite_view %}Favorieten{% else %}Profielen{% endif %} — RLDB{% endblock %}
 {% block content %}
 
 <div class="flex gap-5 items-start">
@@ -8,7 +8,7 @@
        SIDEBAR — zoek + filters
   ══════════════════════════════════════════ -->
   <aside class="w-52 shrink-0 sticky top-5">
-    <form id="filter-form" method="get" action="{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% else %}/{% endif %}">
+    <form id="filter-form" method="get" action="{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% elif favourite_view %}/favorieten{% else %}/{% endif %}">
       <input type="hidden" name="page" value="1">
       {% if archive_view %}
       <input type="hidden" name="archived_only" value="1">
@@ -16,6 +16,8 @@
       <input type="hidden" name="contacted_only" value="1">
       {% elif visited_view %}
       <input type="hidden" name="visited_only" value="1">
+      {% elif favourite_view %}
+      <input type="hidden" name="favourite_only" value="1">
       {% endif %}
       {% if run_id is defined and run_id %}
       <input type="hidden" name="run_id" value="{{ run_id }}">
@@ -192,6 +194,8 @@
         Gecontacteerd — {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% elif visited_view %}
         Bezocht — {{ total }} profiel{{ 'en' if total != 1 else '' }}
+        {% elif favourite_view %}
+        Favorieten — {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% else %}
         {{ total }} profiel{{ 'en' if total != 1 else '' }}
         {% endif %}
@@ -261,6 +265,12 @@
                  data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
         </label>
         {% else %}
+        <button onclick="event.preventDefault(); toggleFav('{{ profile.id }}', {{ 'true' if profile.is_favourite else 'false' }})"
+                class="absolute top-1.5 left-1.5 transition
+                       bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
+                       text-xs leading-none
+                       {{ 'text-yellow-400' if profile.is_favourite else 'opacity-0 group-hover:opacity-100 text-gray-500 hover:text-yellow-400' }}"
+                title="{{ 'Verwijder uit favorieten' if profile.is_favourite else 'Toevoegen aan favorieten' }}">★</button>
         <button onclick="event.preventDefault(); archiveProfile('{{ profile.id }}')"
                 class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition
                        bg-black/70 rounded-full w-5 h-5 flex items-center justify-center
@@ -317,6 +327,9 @@
                 <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer"
                        data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">
                 {% else %}
+                <button onclick="toggleFav('{{ profile.id }}', {{ 'true' if profile.is_favourite else 'false' }})"
+                        class="{{ 'text-yellow-400' if profile.is_favourite else 'text-gray-700 hover:text-yellow-400' }} transition text-sm leading-none mr-1.5"
+                        title="{{ 'Verwijder uit favorieten' if profile.is_favourite else 'Toevoegen aan favorieten' }}">★</button>
                 <button onclick="archiveProfile('{{ profile.id }}')"
                         class="text-gray-700 hover:text-orange-400 transition text-sm leading-none"
                         title="Archiveren">✕</button>
@@ -343,6 +356,8 @@
       <p class="text-base">Nog geen gecontacteerde profielen</p>
       {% elif visited_view %}
       <p class="text-base">Nog geen bezochte profielen</p>
+      {% elif favourite_view %}
+      <p class="text-base">Nog geen favoriete profielen</p>
       {% else %}
       <p class="text-base">Nog geen profielen beschikbaar</p>
       <p class="text-sm mt-2 text-gray-700">Wacht op de eerste scrape-run of controleer de status.</p>
@@ -413,6 +428,20 @@ function _removeCard(profileId) {
 async function archiveProfile(profileId) {
   const resp = await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
   if (resp.ok) _removeCard(profileId);
+}
+
+async function toggleFav(profileId, currentlyFav) {
+  if (currentlyFav && !confirm('Verwijderen uit favorieten?')) return;
+  const resp = await fetch('/profile/' + profileId + '/favourite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ set: !currentlyFav }),
+  });
+  if (resp.ok) {
+    const onFavPage = !!document.querySelector('input[name="favourite_only"]');
+    if (onFavPage && currentlyFav) _removeCard(profileId);
+    else location.reload();
+  }
 }
 
 async function restoreProfile(profileId) {
@@ -490,10 +519,10 @@ async function restoreSelected() {
 
 // --- Filter wissen ---
 function clearFilters() {
-  {% if not archive_view and not contacted_view and not visited_view %}
+  {% if not archive_view and not contacted_view and not visited_view and not favourite_view %}
   localStorage.removeItem('dashboardFilters');
   {% endif %}
-  location.href = '{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% else %}/{% endif %}';
+  location.href = '{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% elif favourite_view %}/favorieten{% else %}/{% endif %}';
 }
 
 // --- Unified fetch (instant filter + infinite scroll) ---

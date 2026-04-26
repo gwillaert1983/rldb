@@ -2,9 +2,8 @@
 {% block title %}Instellingen — RLDB{% endblock %}
 {% block content %}
 
-<div class="mb-6">
-  <h1 class="text-xl font-bold text-white">Scraper instellingen</h1>
-  <p class="text-gray-500 text-sm mt-1">Profielen die niet voldoen aan de filters worden overgeslagen tijdens het scrapen. Laat een veld leeg voor geen limiet.</p>
+<div class="mb-5">
+  <h1 class="text-xl font-bold text-white">Instellingen</h1>
 </div>
 
 {% if saved %}
@@ -18,93 +17,139 @@
 </div>
 {% endif %}
 
-<form method="post" action="/settings" class="max-w-lg space-y-6">
-
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-    <h2 class="text-sm font-medium text-gray-300">Scrape planning</h2>
-    <div>
-      <label class="text-xs text-gray-500 mb-1 block">Interval (minuten)</label>
-      <input type="number" name="scrape_interval" min="5"
-        value="{{ s.scrape_interval_minutes if s and s.scrape_interval_minutes else '' }}"
-        placeholder="Standaard: {{ env_interval }} min"
-        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      <p class="text-xs text-gray-600 mt-1">Laat leeg om de .env standaard te gebruiken ({{ env_interval }} min). Wijziging is direct van kracht, zonder herstart.</p>
-    </div>
+{% if scrape_stats %}
+<!-- Statistiektegels -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white">{{ scrape_stats.avg_dur }}m</div>
+    <div class="text-gray-500 text-xs mt-1">Gem. looptijd</div>
   </div>
-
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-    <h2 class="text-sm font-medium text-gray-300">Leeftijd (jaren)</h2>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Minimum</label>
-        <input type="number" name="min_age" min="18" max="99"
-          value="{{ s.min_age if s and s.min_age else '' }}"
-          placeholder="b.v. 18"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      </div>
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Maximum</label>
-        <input type="number" name="max_age" min="18" max="99"
-          value="{{ s.max_age if s and s.max_age else '' }}"
-          placeholder="b.v. 35"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      </div>
-    </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white">{{ scrape_stats.avg_found }}</div>
+    <div class="text-gray-500 text-xs mt-1">Gem. gevonden</div>
   </div>
-
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-    <h2 class="text-sm font-medium text-gray-300">Gewicht (kg)</h2>
-    <div class="grid grid-cols-2 gap-4">
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Minimum</label>
-        <input type="number" name="min_weight" min="30" max="200"
-          value="{{ s.min_weight if s and s.min_weight else '' }}"
-          placeholder="b.v. 45"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      </div>
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Maximum</label>
-        <input type="number" name="max_weight" min="30" max="200"
-          value="{{ s.max_weight if s and s.max_weight else '' }}"
-          placeholder="b.v. 70"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold {{ 'text-orange-400' if scrape_stats.skip_rate > 50 else 'text-white' }}">
+      {{ scrape_stats.skip_rate }}%
     </div>
+    <div class="text-gray-500 text-xs mt-1">Overgeslagen</div>
   </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white">{{ scrape_stats.new_rate }}%</div>
+    <div class="text-gray-500 text-xs mt-1">Nieuw per run</div>
+  </div>
+</div>
 
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-    <h2 class="text-sm font-medium text-gray-300">Lengte (cm)</h2>
-    <div class="grid grid-cols-2 gap-4">
+<!-- Adviestegel -->
+<div class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 space-y-2">
+  <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Advies</div>
+  {% for tip in scrape_stats.tips %}
+  <div class="flex gap-2 text-sm leading-snug
+    {{ 'text-orange-300' if tip.type == 'warning' else 'text-blue-300' if tip.type == 'info' else 'text-green-400' }}">
+    <span class="shrink-0">{{ '⚠' if tip.type == 'warning' else 'ℹ' if tip.type == 'info' else '✓' }}</span>
+    <span>{{ tip.text }}</span>
+  </div>
+  {% endfor %}
+  <div class="text-xs text-gray-600 pt-1">Op basis van {{ scrape_stats.sample }} recente voltooide runs.</div>
+</div>
+{% endif %}
+
+<form method="post" action="/settings">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+
+    <!-- Links: Scrape planning -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <h2 class="text-sm font-medium text-gray-300">Scrape planning</h2>
       <div>
-        <label class="text-xs text-gray-500 mb-1 block">Minimum</label>
-        <input type="number" name="min_height" min="140" max="210"
-          value="{{ s.min_height if s and s.min_height else '' }}"
-          placeholder="b.v. 155"
+        <label class="text-xs text-gray-500 mb-1 block">Interval (minuten)</label>
+        <input type="number" name="scrape_interval" min="5"
+          value="{{ s.scrape_interval_minutes if s and s.scrape_interval_minutes else '' }}"
+          placeholder="Standaard: {{ env_interval }} min"
           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-      </div>
-      <div>
-        <label class="text-xs text-gray-500 mb-1 block">Maximum</label>
-        <input type="number" name="max_height" min="140" max="210"
-          value="{{ s.max_height if s and s.max_height else '' }}"
-          placeholder="b.v. 175"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+        <p class="text-xs text-gray-600 mt-1">Laat leeg om de .env standaard te gebruiken ({{ env_interval }} min). Wijziging is direct van kracht, zonder herstart.</p>
       </div>
     </div>
-  </div>
 
-  {% set active_genders = (s.gender_filter.split(',') if s and s.gender_filter else []) %}
-  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
-    <h2 class="text-sm font-medium text-gray-300">Geslacht</h2>
-    <p class="text-xs text-gray-500">Geen selectie = alle geslachten worden gescraped.</p>
-    <div class="flex flex-wrap gap-4">
-      {% for value, label in [('Vrouw', 'Vrouw'), ('Man', 'Man'), ('Transseksueel', 'Trans')] %}
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" name="genders" value="{{ value }}"
-          {% if value in active_genders %}checked{% endif %}
-          class="w-4 h-4 rounded accent-blue-500">
-        <span class="text-sm text-gray-200">{{ label }}</span>
-      </label>
-      {% endfor %}
+    <!-- Rechts: Profielfilters -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <h2 class="text-sm font-medium text-gray-300">Profielfilters</h2>
+      <p class="text-xs text-gray-500 -mt-2">Laat een veld leeg voor geen limiet. Profielen buiten de filters worden overgeslagen.</p>
+
+      <div>
+        <div class="text-xs text-gray-500 mb-1.5">Leeftijd (jaren)</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
+            <input type="number" name="min_age" min="18" max="99"
+              value="{{ s.min_age if s and s.min_age else '' }}"
+              placeholder="b.v. 18"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
+            <input type="number" name="max_age" min="18" max="99"
+              value="{{ s.max_age if s and s.max_age else '' }}"
+              placeholder="b.v. 35"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="text-xs text-gray-500 mb-1.5">Gewicht (kg)</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
+            <input type="number" name="min_weight" min="30" max="200"
+              value="{{ s.min_weight if s and s.min_weight else '' }}"
+              placeholder="b.v. 45"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
+            <input type="number" name="max_weight" min="30" max="200"
+              value="{{ s.max_weight if s and s.max_weight else '' }}"
+              placeholder="b.v. 70"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="text-xs text-gray-500 mb-1.5">Lengte (cm)</div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
+            <input type="number" name="min_height" min="140" max="210"
+              value="{{ s.min_height if s and s.min_height else '' }}"
+              placeholder="b.v. 155"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
+            <input type="number" name="max_height" min="140" max="210"
+              value="{{ s.max_height if s and s.max_height else '' }}"
+              placeholder="b.v. 175"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+      </div>
+
+      {% set active_genders = (s.gender_filter.split(',') if s and s.gender_filter else []) %}
+      <div>
+        <div class="text-xs text-gray-500 mb-1.5">Geslacht <span class="text-gray-600">(leeg = alle)</span></div>
+        <div class="flex flex-wrap gap-4">
+          {% for value, label in [('Vrouw', 'Vrouw'), ('Man', 'Man'), ('Transseksueel', 'Trans')] %}
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="genders" value="{{ value }}"
+              {% if value in active_genders %}checked{% endif %}
+              class="w-4 h-4 rounded accent-blue-500">
+            <span class="text-sm text-gray-200">{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -123,7 +168,7 @@
 
 </form>
 
-<div class="max-w-lg mt-10 pt-8 border-t border-gray-800">
+<div class="mt-10 pt-8 border-t border-gray-800 max-w-2xl">
   <h2 class="text-sm font-medium text-red-400 mb-1">Gevaarzone</h2>
   <p class="text-gray-500 text-xs mb-4">Wist alle profielen, foto's (ook in R2) en scrape-geschiedenis uit de database. Niet ongedaan te maken.</p>
   <form method="post" action="/settings/wipe"

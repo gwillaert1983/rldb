@@ -87,7 +87,7 @@
 <!-- Run geschiedenis -->
 <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recente runs</h2>
 <div id="runs-table-wrapper">
-{% if recent_runs %}
+{% if runs_by_day %}
 <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
   <table class="w-full text-sm" id="runs-table">
     <thead>
@@ -97,14 +97,26 @@
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Gevonden</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Nieuw</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Geüpdated</th>
+        <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Overgeslagen</th>
         <th class="text-right text-xs text-gray-500 font-normal px-3 py-3">Foto's</th>
         <th class="text-right text-xs text-gray-500 font-normal px-4 py-3">Duur</th>
       </tr>
     </thead>
     <tbody id="runs-tbody">
-      {% for run in recent_runs %}
-      <tr class="border-b border-gray-800/50 hover:bg-gray-800/20 transition" id="run-{{ run.id }}">
-        <td class="px-4 py-2.5 text-gray-300 text-sm">{{ run.started_at | to_local }}</td>
+      {% for group in runs_by_day %}
+      {% set gid = 'day-' ~ loop.index %}
+      <tr class="bg-gray-800/40 hover:bg-gray-700/30 cursor-pointer select-none border-b border-gray-800/50"
+          onclick="toggleDay('{{ gid }}')">
+        <td colspan="8" class="px-4 py-2 text-xs text-gray-400 font-medium">
+          <span id="{{ gid }}-arrow" class="mr-1.5 inline-block w-3">{{ '▾' if group.is_today else '▸' }}</span>
+          {{ group.date }}
+          <span class="text-gray-600 ml-2">{{ group.runs | length }} runs</span>
+        </td>
+      </tr>
+      {% for run in group.runs %}
+      <tr class="{{ gid }}-row {% if not group.is_today %}hidden{% endif %} border-b border-gray-800/50 hover:bg-gray-800/20 transition"
+          id="run-{{ run.id }}">
+        <td class="px-4 py-2.5 text-gray-300 text-sm">{{ run.started_at | to_local('%H:%M') }}</td>
         <td class="px-4 py-2.5">
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
             {{ 'bg-green-900/40 text-green-400' if run.status.value == 'completed' else
@@ -127,6 +139,7 @@
              class="text-blue-400 hover:underline hover:text-blue-300">{{ run.profiles_updated }}</a>
           {% else %}<span class="text-gray-600">0</span>{% endif %}
         </td>
+        <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.profiles_skipped or 0 }}</td>
         <td class="px-3 py-2.5 text-right text-gray-400 text-sm">{{ run.photos_downloaded or 0 }}</td>
         <td class="px-4 py-2.5 text-right text-gray-500 text-xs">
           {% if run.finished_at %}
@@ -136,10 +149,11 @@
         </td>
       </tr>
       {% if run.error_message %}
-      <tr class="bg-red-950/20">
-        <td colspan="7" class="px-4 py-2 text-xs text-red-400 font-mono">{{ run.error_message }}</td>
+      <tr class="{{ gid }}-row {% if not group.is_today %}hidden{% endif %} bg-red-950/20">
+        <td colspan="8" class="px-4 py-2 text-xs text-red-400 font-mono">{{ run.error_message }}</td>
       </tr>
       {% endif %}
+      {% endfor %}
       {% endfor %}
     </tbody>
   </table>
@@ -167,6 +181,14 @@ function badgeClass(s) {
          s === 'failed'    ? 'bg-red-900/40 text-red-400' :
          s === 'stopped'   ? 'bg-orange-900/40 text-orange-400' :
                              'bg-yellow-900/40 text-yellow-400';
+}
+
+function toggleDay(gid) {
+  const rows = document.querySelectorAll('.' + gid + '-row');
+  const arrow = document.getElementById(gid + '-arrow');
+  const isHidden = rows.length > 0 && rows[0].classList.contains('hidden');
+  rows.forEach(r => r.classList.toggle('hidden', !isHidden));
+  if (arrow) arrow.textContent = isHidden ? '▾' : '▸';
 }
 
 async function poll() {
@@ -216,7 +238,8 @@ async function poll() {
         row.cells[2].textContent = r.profiles_found;
         row.cells[3].textContent = r.profiles_new;
         row.cells[4].textContent = r.profiles_updated;
-        row.cells[5].textContent = r.photos_downloaded;
+        row.cells[5].textContent = r.profiles_skipped;
+        row.cells[6].textContent = r.photos_downloaded;
       }
     }
 
