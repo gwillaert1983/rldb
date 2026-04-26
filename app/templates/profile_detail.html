@@ -541,7 +541,7 @@ async function toggleFavDetail() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ set: !isFav }),
   });
-  if (resp.ok) location.reload();
+  if (resp.ok) history.back();
 }
 
 function toggleStatus(type) {
@@ -610,16 +610,7 @@ async function deleteVisit(visitId) {
 <script>
 async function toggleArchiveDetail(id) {
   const resp = await fetch('/profile/' + id + '/archive', {method: 'POST'});
-  if (resp.ok) {
-    const data = await resp.json();
-    const btn = document.getElementById('archive-btn');
-    btn.textContent = data.is_archived ? 'Dearchiveren' : 'Archiveren';
-    if (data.is_archived) {
-      btn.className = btn.className.replace('border-gray-700 text-gray-500 hover:text-orange-400 hover:border-orange-700', 'border-orange-700 text-orange-400 hover:border-orange-500');
-    } else {
-      btn.className = btn.className.replace('border-orange-700 text-orange-400 hover:border-orange-500', 'border-gray-700 text-gray-500 hover:text-orange-400 hover:border-orange-700');
-    }
-  }
+  if (resp.ok) history.back();
 }
 </script>
 
