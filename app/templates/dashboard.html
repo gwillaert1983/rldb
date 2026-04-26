@@ -227,6 +227,41 @@
     </div>
     {% endif %}
 
+    {% if visited_view is defined and visited_view and visit_stats is defined and visit_stats %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      {% for label, key in [('Deze week','this_week'),('Deze maand','this_month'),('Dit jaar','this_year'),('Totaal','all_time')] %}
+      <div class="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
+        <div class="text-xs text-gray-500 mb-1">{{ label }}</div>
+        <div class="text-sm font-mono {% if key == 'all_time' %}text-purple-400{% else %}text-white{% endif %}">
+          € {{ "%.2f" | format(visit_stats[key]) }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if visit_stats.by_month %}
+    <div class="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="border-b border-gray-800 text-gray-500">
+            <th class="px-4 py-2 text-left font-normal">Maand</th>
+            <th class="px-4 py-2 text-right font-normal">Bezoeken</th>
+            <th class="px-4 py-2 text-right font-normal">Totaal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in visit_stats.by_month %}
+          <tr class="border-b border-gray-800/40 hover:bg-gray-800/20">
+            <td class="px-4 py-2 text-gray-300">{{ m.label }}</td>
+            <td class="px-4 py-2 text-right text-gray-500">{{ m.count }}</td>
+            <td class="px-4 py-2 text-right font-mono text-purple-400">€ {{ "%.2f" | format(m.total) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+
     {% if profiles %}
 
     <!-- ── Rasterweergave ── -->
@@ -597,7 +632,7 @@ new IntersectionObserver(entries => {
   }
 }, { root: _mainEl, rootMargin: '200px' }).observe(document.getElementById('scroll-sentinel'));
 
-{% if not archive_view and not contacted_view and not visited_view %}
+{% if not archive_view and not contacted_view and not visited_view and not favourite_view %}
 // --- Filter persistentie (alleen op hoofdpagina) ---
 const FILTER_KEY = 'dashboardFilters';
 

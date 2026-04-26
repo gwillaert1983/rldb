@@ -68,6 +68,17 @@ def init_db():
     _migrate(text("ALTER TABLE profiles ADD COLUMN visited_note TEXT"))
     _migrate(text("ALTER TABLE scrape_runs ADD COLUMN profiles_skipped INTEGER DEFAULT 0"))
     _migrate(text("ALTER TABLE profiles ADD COLUMN is_favourite BOOLEAN DEFAULT 0"))
+    _migrate(text("""CREATE TABLE IF NOT EXISTS visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        visited_at DATETIME NOT NULL,
+        amount REAL,
+        note TEXT
+    )"""))
+    _migrate(text("""INSERT INTO visits (profile_id, visited_at, note)
+        SELECT id, visited_at, visited_note FROM profiles
+        WHERE is_visited = 1 AND visited_at IS NOT NULL
+          AND id NOT IN (SELECT DISTINCT profile_id FROM visits)"""))
     with engine.connect() as conn:
         conn.execute(text(
             "UPDATE scrape_runs SET status='failed', "

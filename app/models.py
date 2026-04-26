@@ -3,7 +3,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Text, DateTime, Boolean,
+    Column, String, Text, DateTime, Boolean, Float,
     ForeignKey, Integer, Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -56,6 +56,12 @@ class Profile(Base):
         back_populates="profile",
         cascade="all, delete-orphan",
         order_by="Advertisement.last_seen.desc()",
+    )
+    visits = relationship(
+        "Visit",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+        lazy="select",
     )
 
 
@@ -110,6 +116,18 @@ class Advertisement(Base):
     is_active    = Column(Boolean, default=True)
 
     profile = relationship("Profile", back_populates="advertisements")
+
+
+class Visit(Base):
+    __tablename__ = "visits"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id  = Column(String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    visited_at  = Column(DateTime, nullable=False)
+    amount      = Column(Float, nullable=True)
+    note        = Column(Text, nullable=True)
+
+    profile = relationship("Profile", back_populates="visits")
 
 
 class ScraperSettings(Base):

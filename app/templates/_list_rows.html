@@ -22,7 +22,7 @@
   <td class="px-3 py-2 text-right text-gray-600 text-xs">
     {{ profile.last_scraped | to_local('%d/%m/%y') if profile.last_scraped else '—' }}
   </td>
-  <td class="px-2 py-2 text-center" onclick="event.stopPropagation()">
+  <td class="px-2 py-2 text-center whitespace-nowrap" onclick="event.stopPropagation()">
     {% if profile.is_archived %}
     <input type="checkbox" class="profile-checkbox w-3.5 h-3.5 accent-blue-500 cursor-pointer"
            data-id="{{ profile.id }}" onchange="toggleSelect('{{ profile.id }}', this.checked)">

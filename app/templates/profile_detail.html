@@ -299,30 +299,56 @@
       <!-- Bezocht -->
       <div>
         <div class="flex items-center gap-2 mb-2">
-          <button id="btn-visited" onclick="toggleStatus('visited')"
-                  class="text-xs border rounded px-2 py-1 transition
-                         {% if profile.is_visited %}border-purple-700 text-purple-400 hover:border-purple-500{% else %}border-gray-700 text-gray-500 hover:text-purple-400 hover:border-purple-700{% endif %}">
-            {% if profile.is_visited %}✓ Bezocht{% else %}Bezocht{% endif %}
+          <span class="text-xs font-medium text-gray-400">
+            Bezocht{% if profile.visits %} ({{ profile.visits | length }}){% endif %}
+          </span>
+          <button onclick="showAddVisit()"
+                  class="text-xs border border-gray-700 rounded px-2 py-0.5 text-gray-500
+                         hover:text-purple-400 hover:border-purple-700 transition">
+            + Toevoegen
           </button>
-          {% if profile.is_visited and profile.visited_at %}
-          <span class="text-xs text-gray-500">{{ profile.visited_at | to_local('%d/%m/%Y') }}</span>
-          {% endif %}
         </div>
-        {% if profile.is_visited and profile.visited_note %}
-        <div class="text-xs text-gray-400 bg-gray-800/60 rounded p-2 whitespace-pre-line mb-2">{{ profile.visited_note }}</div>
-        {% endif %}
-        <div id="form-visited" class="hidden mt-1 space-y-2">
-          <input type="date" id="date-visited"
-                 class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:ring-1 focus:ring-blue-500">
-          <textarea id="note-visited" rows="3" placeholder="Notitie…"
-                    class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"></textarea>
+
+        <!-- Formulier nieuw bezoek -->
+        <div id="form-add-visit" class="hidden mb-2 space-y-1.5">
+          <input type="date" id="visit-date"
+                 class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:ring-1 focus:ring-purple-600">
+          <input type="number" id="visit-amount" placeholder="Bedrag (€)" step="0.01" min="0"
+                 class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full focus:outline-none focus:ring-1 focus:ring-purple-600">
+          <textarea id="visit-note" rows="2" placeholder="Notitie (optioneel)"
+                    class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-full resize-none focus:outline-none focus:ring-1 focus:ring-purple-600"></textarea>
           <div class="flex gap-2">
-            <button onclick="saveStatus('visited')"
-                    class="bg-purple-800 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded transition">Opslaan</button>
-            <button onclick="hideForm('visited')"
+            <button onclick="saveVisit()"
+                    class="bg-purple-800 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded transition">
+              Opslaan
+            </button>
+            <button onclick="hideAddVisit()"
                     class="text-gray-500 hover:text-gray-300 text-xs transition">Annuleren</button>
           </div>
         </div>
+
+        <!-- Bestaande visits -->
+        {% set sorted_visits = profile.visits | sort(attribute='visited_at', reverse=True) %}
+        {% if sorted_visits %}
+        <div class="space-y-1">
+          {% for visit in sorted_visits %}
+          <div class="flex items-center gap-2 text-xs group">
+            <span class="text-gray-500 shrink-0">{{ visit.visited_at | to_local('%d/%m/%Y') }}</span>
+            {% if visit.amount is not none %}
+            <span class="font-mono text-purple-400 shrink-0">€ {{ "%.2f" | format(visit.amount) }}</span>
+            {% endif %}
+            {% if visit.note %}
+            <span class="text-gray-600 truncate">{{ visit.note }}</span>
+            {% endif %}
+            <button onclick="deleteVisit({{ visit.id }})"
+                    class="ml-auto shrink-0 text-gray-700 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                    title="Verwijder dit bezoek">✕</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-xs text-gray-600">Nog niet bezocht</p>
+        {% endif %}
       </div>
     </div>
 
@@ -474,12 +500,37 @@ async function saveStatus(type, set) {
   if (set === undefined) set = true;
   const date = set ? document.getElementById('date-' + type).value : null;
   const note = set ? document.getElementById('note-' + type).value : null;
-  const endpoint = type === 'contacted' ? 'contact' : 'visit';
-  const resp = await fetch('/profile/' + _profileId + '/' + endpoint, {
+  const resp = await fetch('/profile/' + _profileId + '/contact', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ set, date, note }),
   });
+  if (resp.ok) location.reload();
+}
+
+function showAddVisit() {
+  document.getElementById('visit-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('visit-amount').value = '';
+  document.getElementById('visit-note').value = '';
+  document.getElementById('form-add-visit').classList.remove('hidden');
+}
+function hideAddVisit() {
+  document.getElementById('form-add-visit').classList.add('hidden');
+}
+async function saveVisit() {
+  const date   = document.getElementById('visit-date').value;
+  const amount = document.getElementById('visit-amount').value;
+  const note   = document.getElementById('visit-note').value;
+  const resp = await fetch('/profile/' + _profileId + '/visit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ set: true, date, amount: amount ? parseFloat(amount) : null, note }),
+  });
+  if (resp.ok) location.reload();
+}
+async function deleteVisit(visitId) {
+  if (!confirm('Bezoek verwijderen?')) return;
+  const resp = await fetch('/profile/' + _profileId + '/visit/' + visitId, { method: 'DELETE' });
   if (resp.ok) location.reload();
 }
 </script>

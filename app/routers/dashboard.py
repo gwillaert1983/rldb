@@ -1,6 +1,7 @@
 import json
 import math
-from datetime import datetime
+import pytz
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import exists
 
 from app.dependencies import get_db, require_login
-from app.models import Advertisement, Profile, ScrapeRun
+from app.models import Advertisement, Profile, ScrapeRun, Visit
 from app.templates_config import templates
 
 # Comprehensive Belgian municipality → province mapping
@@ -181,6 +182,42 @@ EXTRA_LABELS = {
 router = APIRouter()
 
 PAGE_SIZE = 24
+
+_TZ = pytz.timezone("Europe/Brussels")
+
+
+def _compute_visit_stats(db) -> dict:
+    visits = db.query(Visit).all()
+    if not visits:
+        return {}
+
+    def _dt(v):
+        dt = v.visited_at
+        return pytz.utc.localize(dt) if dt.tzinfo is None else dt
+
+    now = datetime.now(_TZ)
+    week_start  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    year_start  = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    def total(cutoff):
+        return sum(v.amount or 0 for v in visits if _dt(v) >= cutoff)
+
+    by_month: dict = {}
+    for v in visits:
+        ldt = _dt(v).astimezone(_TZ)
+        key = ldt.strftime("%Y-%m")
+        by_month.setdefault(key, {"label": ldt.strftime("%B %Y"), "count": 0, "total": 0.0})
+        by_month[key]["count"] += 1
+        by_month[key]["total"] += v.amount or 0
+
+    return {
+        "this_week":  total(week_start),
+        "this_month": total(month_start),
+        "this_year":  total(year_start),
+        "all_time":   sum(v.amount or 0 for v in visits),
+        "by_month":   [by_month[k] for k in sorted(by_month.keys(), reverse=True)][:12],
+    }
 
 
 def _build_profile_query(db, q, gender, location, province, nationality, language,
@@ -594,6 +631,7 @@ async def visited_list(
         return user
 
     dropdowns = _dropdown_values(db, visited_only=True)
+    visit_stats = _compute_visit_stats(db)
 
     query = _build_profile_query(
         db, q, gender, location, province, nationality, language,
@@ -638,6 +676,7 @@ async def visited_list(
             "contacted_view": False,
             "visited_view": True,
             "favourite_view": False,
+            "visit_stats": visit_stats,
             "run_id": "",
             "run_filter": "",
             "run_context": None,
@@ -892,7 +931,7 @@ async def set_contact_status(
 
 
 @router.post("/profile/{profile_id}/visit")
-async def set_visit_status(
+async def add_visit(
     profile_id: str,
     request: Request,
     db: Session = Depends(get_db),
@@ -904,18 +943,49 @@ async def set_visit_status(
     if not profile:
         return JSONResponse({"error": "not found"}, status_code=404)
     body = await request.json()
-    set_val = bool(body.get("set", False))
-    profile.is_visited = set_val
-    if set_val:
-        date_str = body.get("date", "")
-        try:
-            profile.visited_at = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.utcnow()
-        except ValueError:
-            profile.visited_at = datetime.utcnow()
-        profile.visited_note = body.get("note", "") or ""
-    else:
+    set_val = body.get("set", True)
+
+    if not set_val:
+        db.query(Visit).filter(Visit.profile_id == profile_id).delete()
+        profile.is_visited = False
         profile.visited_at = None
         profile.visited_note = None
+    else:
+        date_str = body.get("date", "")
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d") if date_str else datetime.utcnow()
+        except ValueError:
+            dt = datetime.utcnow()
+        amount_val = body.get("amount")
+        amount = float(amount_val) if amount_val not in (None, "", 0, "0") else None
+        visit = Visit(profile_id=profile_id, visited_at=dt, amount=amount,
+                      note=body.get("note") or None)
+        db.add(visit)
+        profile.is_visited = True
+        profile.visited_at = dt
+
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.delete("/profile/{profile_id}/visit/{visit_id}")
+async def delete_visit(
+    profile_id: str,
+    visit_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    visit = db.query(Visit).filter(Visit.id == visit_id, Visit.profile_id == profile_id).first()
+    if not visit:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    db.delete(visit)
+    db.flush()
+    remaining = db.query(Visit).filter(Visit.profile_id == profile_id).count()
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if profile:
+        profile.is_visited = remaining > 0
     db.commit()
     return JSONResponse({"ok": True})
 
