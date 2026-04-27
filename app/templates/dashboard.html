@@ -121,33 +121,45 @@
           <input type="hidden" name="height_max" id="height_max" value="{{ height_max or '' }}">
         </div>
 
-        <!-- Nationaliteit multi-select -->
+        <!-- Nationaliteit -->
         {% if distinct_nationalities %}
         <div>
           <label class="block text-xs text-gray-500 mb-1">Nationaliteit</label>
-          <div class="multisel" id="ms-nationality" data-name="nationality"
-               data-options="{{ distinct_nationalities | tojson | e }}"
-               data-selected="{{ nationality | tojson | e }}"></div>
+          <select name="nationality" id="inp-nationality"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for nat in distinct_nationalities %}
+            <option value="{{ nat }}" {{ 'selected' if nat in nationality }}>{{ nat }}</option>
+            {% endfor %}
+          </select>
         </div>
         {% endif %}
 
-        <!-- Taal multi-select -->
+        <!-- Taal -->
         {% if distinct_languages %}
         <div>
           <label class="block text-xs text-gray-500 mb-1">Taal</label>
-          <div class="multisel" id="ms-language" data-name="language"
-               data-options="{{ distinct_languages | tojson | e }}"
-               data-selected="{{ language | tojson | e }}"></div>
+          <select name="language" id="inp-language"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for lang in distinct_languages %}
+            <option value="{{ lang }}" {{ 'selected' if lang in language }}>{{ lang }}</option>
+            {% endfor %}
+          </select>
         </div>
         {% endif %}
 
-        <!-- Mogelijkheden multi-select -->
+        <!-- Dienst / mogelijkheid -->
         {% if distinct_services %}
         <div>
-          <label class="block text-xs text-gray-500 mb-1">Mogelijkheden</label>
-          <div class="multisel" id="ms-service" data-name="service"
-               data-options="{{ distinct_services | tojson | e }}"
-               data-selected="{{ service | tojson | e }}"></div>
+          <label class="block text-xs text-gray-500 mb-1">Mogelijkheid</label>
+          <select name="service" id="inp-service"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">Alle</option>
+            {% for svc in distinct_services %}
+            <option value="{{ svc }}" {{ 'selected' if svc in service }}>{{ svc }}</option>
+            {% endfor %}
+          </select>
         </div>
         {% endif %}
 
@@ -622,16 +634,9 @@ let _searchTimer = null;
 function _currentParams(page) {
   const fd = new FormData(document.getElementById('filter-form'));
   const p = new URLSearchParams();
-  // Multiselect names — read from state, not hidden inputs (browser compat)
-  const msNames = new Set(['nationality', 'language', 'service']);
   for (const [k, v] of fd.entries()) {
-    if (v !== '' && !msNames.has(k)) p.append(k, v);
+    if (v !== '') p.append(k, v);
   }
-  // Multiselect values from JS state
-  ['nationality', 'language', 'service'].forEach(name => {
-    const ms = window[`_ms_${name}`];
-    if (ms) ms.selected.forEach(v => { if (v) p.append(name, v); });
-  });
   p.set('page', page);
   if (!p.has('with_phone')) p.set('with_phone', '0');
   if (!p.has('with_photo')) p.set('with_photo', '0');
@@ -731,99 +736,6 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
   });
 })();
 
-// --- Multi-select chips ---
-(function() {
-  function buildMultiSelect(el) {
-    const name = el.dataset.name;
-    let options, selected;
-    try { options  = JSON.parse(el.dataset.options  || '[]'); } catch { options  = []; }
-    try { selected = JSON.parse(el.dataset.selected || '[]'); } catch { selected = []; }
-    if (!Array.isArray(selected)) selected = selected ? [selected] : [];
-    selected = selected.filter(Boolean);
-
-    // ms eerst aanmaken — render() leest ms.open/query/selected (niet lokale kopieën)
-    const ms = { name, options, selected, open: false, query: '' };
-
-    function render() {
-      const chips = ms.selected.map(v =>
-        `<span class="inline-flex items-center gap-0.5 bg-blue-600/30 text-blue-300 border border-blue-600/40 text-xs px-1.5 py-0.5 rounded-full">
-          ${v}<button type="button" class="hover:text-white leading-none ml-0.5"
-            onclick="event.stopPropagation();msDeselect('${name}','${v.replace(/'/g,"\\'")}')">×</button>
-        </span>`).join('');
-
-      const filteredOpts = ms.options.filter(o => o.toLowerCase().includes(ms.query.toLowerCase()));
-      const list = filteredOpts.map(o => {
-        const on = ms.selected.includes(o);
-        return `<label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-gray-700 ${on?'text-blue-300':'text-gray-300'}" onclick="event.stopPropagation()">
-          <input type="checkbox" ${on?'checked':''} class="accent-blue-500 w-3.5 h-3.5"
-            onchange="msToggle('${name}','${o.replace(/'/g,"\\'")}',this.checked)">
-          <span class="text-xs truncate">${o}</span>
-        </label>`;
-      }).join('');
-
-      el.innerHTML = `
-        <div class="relative">
-          <div class="min-h-[30px] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 flex flex-wrap gap-1 cursor-pointer"
-               onclick="event.stopPropagation();msToggleOpen('${name}')">
-            ${chips || `<span class="text-xs text-gray-600 self-center">Alle</span>`}
-          </div>
-          <div class="${ms.open?'':'hidden'} absolute top-full left-0 right-0 z-40 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
-               onclick="event.stopPropagation()">
-            <div class="p-2 border-b border-gray-800">
-              <input type="text" placeholder="Zoeken…" value="${ms.query}"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white placeholder-gray-600 focus:outline-none"
-                oninput="msSearch('${name}',this.value)" onclick="event.stopPropagation()">
-            </div>
-            <div class="max-h-40 overflow-y-auto">${list || '<p class="text-xs text-gray-600 px-3 py-2">Geen resultaten</p>'}</div>
-          </div>
-        </div>
-        ${ms.selected.map(v => `<input type="hidden" name="${name}" value="${v}">`).join('')}`;
-    }
-
-    ms.render = render;
-    window[`_ms_${name}`] = ms;
-    render();
-  }
-
-  window.msToggleOpen = function(name) {
-    const ms = window[`_ms_${name}`];
-    if (!ms) return;
-    ms.open = !ms.open;
-    ms.render();
-  };
-  window.msSearch = function(name, q) {
-    const ms = window[`_ms_${name}`];
-    if (!ms) return;
-    ms.query = q;
-    ms.render();
-  };
-  window.msToggle = function(name, val, checked) {
-    const ms = window[`_ms_${name}`];
-    if (!ms) return;
-    if (checked && !ms.selected.includes(val)) ms.selected.push(val);
-    else ms.selected = ms.selected.filter(v => v !== val);
-    ms.render();
-    _fetchProfiles(1, true);
-  };
-  window.msDeselect = function(name, val) {
-    const ms = window[`_ms_${name}`];
-    if (!ms) return;
-    ms.selected = ms.selected.filter(v => v !== val);
-    ms.render();
-    _fetchProfiles(1, true);
-  };
-
-  document.addEventListener('click', () => {
-    ['nationality','language','service'].forEach(n => {
-      const ms = window[`_ms_${n}`];
-      if (ms && ms.open) { ms.open = false; ms.render(); }
-    });
-  });
-
-  document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.multisel').forEach(buildMultiSelect);
-  });
-})();
 
 // --- Swipe op mobiel: links = archiveren, rechts = favoriet ---
 (function() {
@@ -891,15 +803,14 @@ const FILTER_KEY = 'dashboardFilters';
 document.getElementById('filter-form').addEventListener('submit', () => {
   const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return el && el.checked ? '1' : ''; };
-  const msGet = n => { const ms = window[`_ms_${n}`]; return (ms ? ms.selected : []).filter(Boolean); };
   localStorage.setItem(FILTER_KEY, JSON.stringify({
     q: val('inp-q'),
     gender: val('inp-gender'),
     province: val('inp-province'),
     location: val('inp-location'),
-    nationality: msGet('nationality'),
-    language:    msGet('language'),
-    service:     msGet('service'),
+    nationality: val('inp-nationality'),
+    language:    val('inp-language'),
+    service:     val('inp-service'),
     age_min:     val('age_min'), age_max: val('age_max'),
     weight_min:  val('weight_min'), weight_max: val('weight_max'),
     height_min:  val('height_min'), height_max: val('height_max'),
@@ -931,9 +842,9 @@ if (!hasUrlFilters && !hasActive) {
       if (saved.service) p.set('service', saved.service);
       if (saved.ad_category) p.set('ad_category', saved.ad_category);
       if (saved.ad_location) p.set('ad_location', saved.ad_location);
-      if (Array.isArray(saved.nationality)) saved.nationality.forEach(n => p.append('nationality', n));
-      if (Array.isArray(saved.language))    saved.language.forEach(n => p.append('language', n));
-      if (Array.isArray(saved.service))     saved.service.forEach(n => p.append('service', n));
+      if (saved.nationality) p.set('nationality', saved.nationality);
+      if (saved.language)    p.set('language',    saved.language);
+      if (saved.service)     p.set('service',     saved.service);
       if (saved.age_min)    p.set('age_min', saved.age_min);
       if (saved.age_max)    p.set('age_max', saved.age_max);
       if (saved.weight_min) p.set('weight_min', saved.weight_min);
