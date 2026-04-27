@@ -90,87 +90,23 @@
       </div>
     </div>
 
-    <!-- Rechts: Profielfilters -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-      <h2 class="text-sm font-medium text-gray-300">Profielfilters</h2>
-      <p class="text-xs text-gray-500 -mt-2">Laat een veld leeg voor geen limiet. Profielen buiten de filters worden overgeslagen.</p>
+  </div>
 
+  <!-- Filtergroepen (full-width) -->
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-5">
+    <div class="flex items-center justify-between mb-3">
       <div>
-        <div class="text-xs text-gray-500 mb-1.5">Leeftijd (jaren)</div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
-            <input type="number" name="min_age" min="18" max="99"
-              value="{{ s.min_age if s and s.min_age else '' }}"
-              placeholder="b.v. 18"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
-            <input type="number" name="max_age" min="18" max="99"
-              value="{{ s.max_age if s and s.max_age else '' }}"
-              placeholder="b.v. 35"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-        </div>
+        <h2 class="text-sm font-medium text-gray-300">Profielfilters</h2>
+        <p class="text-xs text-gray-500 mt-0.5">OF tussen groepen, EN binnen groep. Leeg = geen beperking op dat criterium.</p>
       </div>
-
-      <div>
-        <div class="text-xs text-gray-500 mb-1.5">Gewicht (kg)</div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
-            <input type="number" name="min_weight" min="30" max="200"
-              value="{{ s.min_weight if s and s.min_weight else '' }}"
-              placeholder="b.v. 45"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
-            <input type="number" name="max_weight" min="30" max="200"
-              value="{{ s.max_weight if s and s.max_weight else '' }}"
-              placeholder="b.v. 70"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div class="text-xs text-gray-500 mb-1.5">Lengte (cm)</div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Minimum</label>
-            <input type="number" name="min_height" min="140" max="210"
-              value="{{ s.min_height if s and s.min_height else '' }}"
-              placeholder="b.v. 155"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="text-xs text-gray-600 mb-1 block">Maximum</label>
-            <input type="number" name="max_height" min="140" max="210"
-              value="{{ s.max_height if s and s.max_height else '' }}"
-              placeholder="b.v. 175"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">
-          </div>
-        </div>
-      </div>
-
-      {% set active_genders = (s.gender_filter.split(',') if s and s.gender_filter else []) %}
-      <div>
-        <div class="text-xs text-gray-500 mb-1.5">Geslacht <span class="text-gray-600">(leeg = alle)</span></div>
-        <div class="flex flex-wrap gap-4">
-          {% for value, label in [('Vrouw', 'Vrouw'), ('Man', 'Man'), ('Transseksueel', 'Trans')] %}
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" name="genders" value="{{ value }}"
-              {% if value in active_genders %}checked{% endif %}
-              class="w-4 h-4 rounded accent-blue-500">
-            <span class="text-sm text-gray-200">{{ label }}</span>
-          </label>
-          {% endfor %}
-        </div>
-      </div>
-
+      <button type="button" onclick="addGroup()"
+              class="text-xs bg-blue-600/20 hover:bg-blue-600/40 border border-blue-600/40 text-blue-400 px-3 py-1.5 rounded-lg transition">
+        + Groep toevoegen
+      </button>
     </div>
+    <div id="filter-groups-container" class="space-y-3"></div>
+    <input type="hidden" name="filter_groups" id="filter-groups-json" value="{{ filter_groups_json }}">
+    <p class="text-xs text-gray-700 mt-3">Oude individuele filters (leeftijd, gewicht...) worden genegeerd zodra je minstens 1 groep opslaat.</p>
   </div>
 
   <div class="flex gap-3">
@@ -187,6 +123,95 @@
   </div>
 
 </form>
+
+<script>
+const GENDERS  = ['Vrouw', 'Man', 'Transseksueel'];
+const ALL_NATS = {{ distinct_nationalities | tojson }};
+const ALL_SVCS = {{ distinct_services | tojson }};
+let _groups = [];
+
+function loadGroups() {
+  try { _groups = JSON.parse(document.getElementById('filter-groups-json').value) || []; }
+  catch { _groups = []; }
+  renderGroups();
+}
+
+function renderGroups() {
+  const c = document.getElementById('filter-groups-container');
+  c.innerHTML = '';
+  if (_groups.length === 0) {
+    c.innerHTML = '<p class="text-xs text-gray-600 py-2">Geen filtergroepen — alle profielen worden opgeslagen.</p>';
+  } else {
+    _groups.forEach((g, i) => c.insertAdjacentHTML('beforeend', groupHTML(g, i)));
+  }
+  syncJSON();
+}
+
+function chips(arr, selected, field, idx) {
+  return arr.map(v => {
+    const on = selected.includes(v);
+    return `<button type="button"
+      onclick="toggleChip(${idx},'${field}',this.dataset.val,this)" data-val="${v}"
+      class="px-2 py-0.5 rounded-full text-xs border transition ${on ? 'bg-blue-600 text-white border-blue-500' : 'bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-500'}">${v}</button>`;
+  }).join('');
+}
+
+function groupHTML(g, i) {
+  const gd = g.genders || [], nd = g.nationalities || [], sd = g.services || [];
+  return `<div class="bg-gray-800 rounded-xl p-4 space-y-3">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-medium text-gray-300">Groep ${i+1}</span>
+      <button type="button" onclick="removeGroup(${i})" class="text-xs text-gray-600 hover:text-red-400 transition">✕ Verwijder groep</button>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div><label class="text-xs text-gray-500 mb-1 block">Leeftijd min</label>
+        <input type="number" min="18" max="99" placeholder="—" value="${g.age_min||''}"
+          oninput="setField(${i},'age_min',this.value?+this.value:null)"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
+      <div><label class="text-xs text-gray-500 mb-1 block">Leeftijd max</label>
+        <input type="number" min="18" max="99" placeholder="—" value="${g.age_max||''}"
+          oninput="setField(${i},'age_max',this.value?+this.value:null)"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
+      <div><label class="text-xs text-gray-500 mb-1 block">Gewicht max (kg)</label>
+        <input type="number" min="30" max="200" placeholder="—" value="${g.weight_max||''}"
+          oninput="setField(${i},'weight_max',this.value?+this.value:null)"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
+      <div><label class="text-xs text-gray-500 mb-1 block">Lengte max (cm)</label>
+        <input type="number" min="140" max="210" placeholder="—" value="${g.height_max||''}"
+          oninput="setField(${i},'height_max',this.value?+this.value:null)"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
+    </div>
+    <div><label class="text-xs text-gray-500 mb-1.5 block">Geslacht <span class="text-gray-600">(leeg = alle)</span></label>
+      <div class="flex flex-wrap gap-1.5">${chips(GENDERS, gd, 'genders', i)}</div></div>
+    ${ALL_NATS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Nationaliteit <span class="text-gray-600">(leeg = alle)</span></label>
+      <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">${chips(ALL_NATS, nd, 'nationalities', i)}</div></div>` : ''}
+    ${ALL_SVCS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Mogelijkheden <span class="text-gray-600">(minstens 1 vereist)</span></label>
+      <div class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">${chips(ALL_SVCS, sd, 'services', i)}</div></div>` : ''}
+  </div>`;
+}
+
+function addGroup() {
+  _groups.push({age_min:null,age_max:null,weight_max:null,height_max:null,genders:[],nationalities:[],services:[]});
+  renderGroups();
+}
+function removeGroup(i) { _groups.splice(i,1); renderGroups(); }
+function setField(i,field,val) { _groups[i][field]=val; syncJSON(); }
+function toggleChip(i, field, val, btn) {
+  const arr = _groups[i][field] || [];
+  const idx = arr.indexOf(val);
+  if (idx >= 0) {
+    arr.splice(idx,1);
+    btn.className = btn.className.replace('bg-blue-600 text-white border-blue-500','bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-500');
+  } else {
+    arr.push(val);
+    btn.className = btn.className.replace('bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-500','bg-blue-600 text-white border-blue-500');
+  }
+  _groups[i][field] = arr;
+  syncJSON();
+}
+function syncJSON() { document.getElementById('filter-groups-json').value = JSON.stringify(_groups); }
+document.addEventListener('DOMContentLoaded', loadGroups);
+</script>
 
 <div class="mt-10 pt-8 border-t border-gray-800 max-w-2xl">
   <h2 class="text-sm font-medium text-red-400 mb-1">Gevaarzone</h2>

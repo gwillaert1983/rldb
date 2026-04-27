@@ -1,3 +1,4 @@
+import json as _json
 import math
 from typing import List
 
@@ -87,6 +88,20 @@ async def settings_page(
                         else settings.SCRAPE_INTERVAL_MINUTES)
     scrape_stats = _compute_scrape_stats(db, current_interval)
 
+    # Distinct nationaliteiten en services voor de filtergroepen-UI
+    _nats, _svcs = set(), set()
+    for (ed,) in db.query(Profile.extra_data).filter(Profile.extra_data.isnot(None)).limit(3000).all():
+        try:
+            d = _json.loads(ed)
+            if d.get("nationality"): _nats.add(d["nationality"])
+            svcs = d.get("services", {})
+            if isinstance(svcs, dict):
+                for items in svcs.values():
+                    if isinstance(items, list):
+                        _svcs.update(i.strip() for i in items if i.strip())
+        except Exception:
+            pass
+
     return templates.TemplateResponse(
         "settings.html",
         {
@@ -96,6 +111,9 @@ async def settings_page(
             "wiped": wiped,
             "env_interval": settings.SCRAPE_INTERVAL_MINUTES,
             "scrape_stats": scrape_stats,
+            "filter_groups_json": (s.filter_groups or "[]") if s else "[]",
+            "distinct_nationalities": sorted(_nats),
+            "distinct_services": sorted(_svcs),
         },
     )
 
@@ -117,6 +135,7 @@ async def settings_save(
     window_6_12: str = Form(""),
     window_12_18: str = Form(""),
     window_18_24: str = Form(""),
+    filter_groups: str = Form("[]"),
 ):
     if isinstance(user, RedirectResponse):
         return user
@@ -137,6 +156,13 @@ async def settings_save(
     s.window_6_12  = 1 if window_6_12  else 0
     s.window_12_18 = 1 if window_12_18 else 0
     s.window_18_24 = 1 if window_18_24 else 0
+
+    try:
+        groups = _json.loads(filter_groups)
+        if not isinstance(groups, list): groups = []
+    except Exception:
+        groups = []
+    s.filter_groups = _json.dumps(groups, ensure_ascii=False) if groups else None
 
     new_interval = _opt_int(scrape_interval)
     s.scrape_interval_minutes = new_interval

@@ -48,6 +48,11 @@
       Favorieten
     </a>
 
+    <a href="/duplicaten" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/duplicaten' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Duplicaten
+    </a>
+
     <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
        {% if path == '/status' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
       Status

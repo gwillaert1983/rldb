@@ -160,6 +160,14 @@
                    class="rounded accent-blue-500">
             Heeft foto's
           </label>
+          {% if not archive_view and not contacted_view and not visited_view and not favourite_view %}
+          <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <input type="checkbox" name="show_favourites" value="1" id="inp-show-fav"
+                   {{ 'checked' if show_favourites is defined and show_favourites }}
+                   class="rounded accent-yellow-400">
+            Toon favorieten
+          </label>
+          {% endif %}
         </div>
 
         <!-- Knoppen -->
@@ -610,6 +618,7 @@ async function _fetchProfiles(page, replace) {
       _page = page;
     }
     _hasMore = data.has_more;
+    if (window._onGridUpdated) window._onGridUpdated();
   } catch(e) {}
   finally {
     _loading = false;
@@ -640,6 +649,65 @@ new IntersectionObserver(entries => {
   }
 }, { root: _mainEl, rootMargin: '200px' }).observe(document.getElementById('scroll-sentinel'));
 
+// --- Swipe op mobiel: links = archiveren, rechts = favoriet ---
+(function() {
+  const THRESHOLD = 80;
+  function setupSwipe(card, profileId, isFav) {
+    let sx = 0, sy = 0, dx = 0, active = false, overlay = null;
+    card.addEventListener('touchstart', e => {
+      sx = e.changedTouches[0].clientX; sy = e.changedTouches[0].clientY;
+      dx = 0; active = false;
+    }, { passive: true });
+    card.addEventListener('touchmove', e => {
+      dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (!active && Math.abs(dy) > Math.abs(dx)) return;
+      active = true;
+      card.style.transform = `translateX(${dx}px)`;
+      card.style.transition = 'none';
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 rounded-xl flex items-center justify-center text-2xl pointer-events-none z-20';
+        card.appendChild(overlay);
+      }
+      overlay.style.background = dx > 0 ? 'rgba(250,204,21,0.3)' : 'rgba(251,146,60,0.3)';
+      overlay.textContent = dx > 0 ? '★' : '✕';
+    }, { passive: true });
+    card.addEventListener('touchend', async () => {
+      if (!active) return;
+      card.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+      if (Math.abs(dx) >= THRESHOLD) {
+        card.style.transform = `translateX(${dx > 0 ? '120%' : '-120%'})`;
+        card.style.opacity = '0';
+        setTimeout(() => card.remove(), 220);
+        if (dx > 0) {
+          await fetch('/profile/' + profileId + '/favourite', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ set: !isFav }),
+          });
+        } else {
+          await fetch('/profile/' + profileId + '/archive', { method: 'POST' });
+        }
+      } else {
+        card.style.transform = '';
+        if (overlay) { overlay.remove(); overlay = null; }
+      }
+      active = false;
+    }, { passive: true });
+  }
+  function initSwipes() {
+    document.querySelectorAll('#view-grid [id^="card-"]').forEach(card => {
+      if (card._swipeInit) return;
+      card._swipeInit = true;
+      const id = card.id.replace('card-', '');
+      const isFav = !!card.querySelector('[title="Verwijder uit favorieten"]');
+      setupSwipe(card, id, isFav);
+    });
+  }
+  document.addEventListener('DOMContentLoaded', initSwipes);
+  window._onGridUpdated = initSwipes;
+})();
+
 {% if not archive_view and not contacted_view and not visited_view and not favourite_view %}
 // --- Filter persistentie (alleen op hoofdpagina) ---
 const FILTER_KEY = 'dashboardFilters';
@@ -659,6 +727,7 @@ document.getElementById('filter-form').addEventListener('submit', () => {
     ad_location: val('inp-ad-location'),
     with_phone: chk('inp-phone'),
     with_photo: chk('inp-photo'),
+    show_favourites: chk('inp-show-fav'),
   }));
 });
 
@@ -684,6 +753,7 @@ if (!hasUrlFilters && !hasActive) {
       if (saved.ad_location) p.set('ad_location', saved.ad_location);
       if (saved.with_phone) p.set('with_phone', '1');
       if (saved.with_photo) p.set('with_photo', '1');
+      if (saved.show_favourites) p.set('show_favourites', '1');
       const qs = p.toString();
       if (qs) location.replace('/?' + qs);
     }

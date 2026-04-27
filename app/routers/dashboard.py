@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import exists
+from sqlalchemy import exists, func
 
 from app.dependencies import get_db, require_login
 from app.models import Advertisement, Profile, ScrapeRun, Visit
@@ -229,7 +229,7 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
                           show_archived=False, archived_only=False,
                           run_id="", run_filter="",
                           contacted_only=False, visited_only=False,
-                          favourite_only=False,
+                          favourite_only=False, hide_favourites=False,
                           service=""):
     query = db.query(Profile).filter(Profile.is_active == True)
     if archived_only:
@@ -242,6 +242,8 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
         query = query.filter(Profile.is_visited == True)
     if favourite_only:
         query = query.filter(Profile.is_favourite == True)
+    if hide_favourites:
+        query = query.filter(Profile.is_favourite != True)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -378,6 +380,7 @@ async def profile_list(
     with_phone: int = Query(0),
     with_photo: int = Query(0),
     show_archived: int = Query(0),
+    show_favourites: int = Query(0),
     service: str = Query(""),
     run_id: str = Query(""),
     run_filter: str = Query(""),
@@ -414,6 +417,7 @@ async def profile_list(
         db, q, gender, location, province, nationality, language,
         ad_category, ad_location, with_phone, with_photo,
         show_archived=bool(show_archived),
+        hide_favourites=not bool(show_favourites),
         service=service,
         run_id=run_id, run_filter=run_filter,
     )
@@ -451,6 +455,7 @@ async def profile_list(
             "with_phone": with_phone,
             "with_photo": with_photo,
             "show_archived": show_archived,
+            "show_favourites": show_favourites,
             "service": service,
             "filters_active": filters_active,
             "archive_view": False,
@@ -764,6 +769,57 @@ async def favourite_list(
             "distinct_ad_locations": [],
         },
     )
+
+
+@router.get("/duplicaten", response_class=HTMLResponse)
+async def duplicates_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    phone_counts = (
+        db.query(Profile.phone, func.count(Profile.id).label("cnt"))
+        .filter(Profile.phone.isnot(None), Profile.phone != "")
+        .group_by(Profile.phone)
+        .having(func.count(Profile.id) > 1)
+        .order_by(func.count(Profile.id).desc())
+        .limit(200)
+        .all()
+    )
+    phone_groups = []
+    for phone, cnt in phone_counts:
+        profiles = db.query(Profile).filter(Profile.phone == phone).order_by(Profile.first_seen).all()
+        phone_groups.append({"key": phone, "count": cnt, "profiles": profiles})
+
+    name_counts = (
+        db.query(Profile.display_name, Profile.location, func.count(Profile.id).label("cnt"))
+        .filter(Profile.display_name.isnot(None), Profile.display_name != "")
+        .group_by(Profile.display_name, Profile.location)
+        .having(func.count(Profile.id) > 1)
+        .order_by(func.count(Profile.id).desc())
+        .limit(200)
+        .all()
+    )
+    name_groups = []
+    for name, location, cnt in name_counts:
+        profiles = (
+            db.query(Profile)
+            .filter(Profile.display_name == name, Profile.location == location)
+            .order_by(Profile.first_seen)
+            .all()
+        )
+        name_groups.append({"key": f"{name} — {location or '?'}", "count": cnt, "profiles": profiles})
+
+    return templates.TemplateResponse("duplicates.html", {
+        "request": request,
+        "phone_groups": phone_groups,
+        "name_groups": name_groups,
+        "total_dup_phone": sum(g["count"] for g in phone_groups),
+        "total_dup_name": sum(g["count"] for g in name_groups),
+    })
 
 
 @router.get("/profiles/more", response_class=JSONResponse)

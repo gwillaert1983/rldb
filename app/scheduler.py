@@ -1,4 +1,5 @@
 import asyncio
+import json as _json
 import logging
 import re
 import threading
@@ -107,41 +108,78 @@ def _scheduled_scrape_job():
     run_scrape_job()
 
 
+def _to_int(val):
+    try:
+        m = re.match(r"(\d+)", str(val).strip())
+        return int(m.group(1)) if m else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _matches_group(extra: dict, g: dict) -> bool:
+    age    = _to_int(extra.get("age"))
+    weight = _to_int(extra.get("weight"))
+    height = _to_int(extra.get("height"))
+
+    if g.get("age_min")    and age    is not None and age    < g["age_min"]:    return False
+    if g.get("age_max")    and age    is not None and age    > g["age_max"]:    return False
+    if g.get("weight_max") and weight is not None and weight > g["weight_max"]: return False
+    if g.get("height_max") and height is not None and height > g["height_max"]: return False
+
+    genders = g.get("genders") or []
+    if genders and str(extra.get("gender", "")).strip() not in genders:
+        return False
+
+    nationalities = g.get("nationalities") or []
+    if nationalities and str(extra.get("nationality", "")).strip() not in nationalities:
+        return False
+
+    services = g.get("services") or []
+    if services:
+        raw_svcs = extra.get("services", {})
+        flat = set()
+        if isinstance(raw_svcs, dict):
+            for items in raw_svcs.values():
+                if isinstance(items, list):
+                    flat.update(i.strip() for i in items if i.strip())
+        if not any(svc in flat for svc in services):
+            return False
+
+    return True
+
+
 def _passes_filter(extra: dict, s) -> bool:
     if s is None:
         return True
 
-    def to_int(val):
+    groups_json = getattr(s, "filter_groups", None)
+    if groups_json:
         try:
-            m = re.match(r"(\d+)", str(val).strip())
-            return int(m.group(1)) if m else None
-        except (ValueError, TypeError, AttributeError):
-            return None
+            groups = _json.loads(groups_json)
+        except Exception:
+            groups = []
+        if groups:
+            return any(_matches_group(extra, g) for g in groups)
+        return True  # lege lijst = geen filter
 
-    age    = to_int(extra.get("age"))
-    weight = to_int(extra.get("weight"))
-    height = to_int(extra.get("height"))
+    # Fallback: oude individuele velden (AND-logica)
+    age    = _to_int(extra.get("age"))
+    weight = _to_int(extra.get("weight"))
+    height = _to_int(extra.get("height"))
 
     if age is not None:
-        if s.min_age and age < s.min_age:
-            return False
-        if s.max_age and age > s.max_age:
-            return False
+        if s.min_age and age < s.min_age:   return False
+        if s.max_age and age > s.max_age:   return False
     if weight is not None:
-        if s.min_weight and weight < s.min_weight:
-            return False
-        if s.max_weight and weight > s.max_weight:
-            return False
+        if s.min_weight and weight < s.min_weight: return False
+        if s.max_weight and weight > s.max_weight: return False
     if height is not None:
-        if s.min_height and height < s.min_height:
-            return False
-        if s.max_height and height > s.max_height:
-            return False
+        if s.min_height and height < s.min_height: return False
+        if s.max_height and height > s.max_height: return False
 
     if s.gender_filter:
         allowed = {g.strip() for g in s.gender_filter.split(",") if g.strip()}
-        gender = str(extra.get("gender", "")).strip()
-        if gender and gender not in allowed:
+        if allowed and str(extra.get("gender", "")).strip() not in allowed:
             return False
 
     return True

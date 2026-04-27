@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Duplicaten — RLDB{% endblock %}
+{% block content %}
+
+<div class="mb-5">
+  <h1 class="text-lg font-semibold text-white">Duplicaten</h1>
+  <p class="text-xs text-gray-500 mt-1">Profielen die hetzelfde telefoonnummer of dezelfde naam + locatie delen.</p>
+</div>
+
+<!-- Statistieken -->
+<div class="grid grid-cols-2 gap-3 mb-6 max-w-sm">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white">{{ phone_groups | length }}</div>
+    <div class="text-gray-500 text-xs mt-1">Groepen (tel.nr)</div>
+  </div>
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div class="text-2xl font-bold text-white">{{ name_groups | length }}</div>
+    <div class="text-gray-500 text-xs mt-1">Groepen (naam)</div>
+  </div>
+</div>
+
+{% if phone_groups %}
+<h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Zelfde telefoonnummer</h2>
+<div class="space-y-3 mb-8">
+  {% for group in phone_groups %}
+  <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div class="px-4 py-2.5 border-b border-gray-800 flex items-center gap-3">
+      <span class="font-mono text-sm text-gray-200">{{ group.key }}</span>
+      <span class="text-xs bg-orange-900/40 text-orange-400 border border-orange-800/50 px-2 py-0.5 rounded-full">{{ group.count }} profielen</span>
+    </div>
+    <div class="flex gap-3 p-3 overflow-x-auto">
+      {% for profile in group.profiles %}
+      <a href="/profile/{{ profile.id }}"
+         class="shrink-0 w-24 group">
+        {% if profile.photos %}
+        <div class="aspect-[3/4] overflow-hidden rounded-lg bg-gray-800 mb-1.5">
+          <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+               alt="{{ profile.display_name or profile.username }}"
+               class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+        </div>
+        {% else %}
+        <div class="aspect-[3/4] rounded-lg bg-gray-800 flex items-center justify-center mb-1.5">
+          <span class="text-gray-700 text-xs">—</span>
+        </div>
+        {% endif %}
+        <div class="text-xs text-white truncate leading-snug">{{ profile.display_name or profile.username or '—' }}</div>
+        <div class="text-xs text-gray-600 leading-snug">{{ profile.first_seen | to_local('%d/%m/%y') }}</div>
+        {% if profile.is_archived %}
+        <span class="text-xs text-orange-500">gearchiveerd</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-600 mb-8">
+  Geen telefoon-duplicaten gevonden.
+</div>
+{% endif %}
+
+{% if name_groups %}
+<h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Zelfde naam + locatie</h2>
+<div class="space-y-3">
+  {% for group in name_groups %}
+  <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div class="px-4 py-2.5 border-b border-gray-800 flex items-center gap-3">
+      <span class="text-sm text-gray-200">{{ group.key }}</span>
+      <span class="text-xs bg-blue-900/40 text-blue-400 border border-blue-800/50 px-2 py-0.5 rounded-full">{{ group.count }} profielen</span>
+    </div>
+    <div class="flex gap-3 p-3 overflow-x-auto">
+      {% for profile in group.profiles %}
+      <a href="/profile/{{ profile.id }}"
+         class="shrink-0 w-24 group">
+        {% if profile.photos %}
+        <div class="aspect-[3/4] overflow-hidden rounded-lg bg-gray-800 mb-1.5">
+          <img src="{{ profile.photos[0].thumbnail_r2_url }}"
+               alt="{{ profile.display_name or profile.username }}"
+               class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+        </div>
+        {% else %}
+        <div class="aspect-[3/4] rounded-lg bg-gray-800 flex items-center justify-center mb-1.5">
+          <span class="text-gray-700 text-xs">—</span>
+        </div>
+        {% endif %}
+        <div class="text-xs text-white truncate leading-snug">{{ profile.display_name or profile.username or '—' }}</div>
+        <div class="text-xs text-gray-600 leading-snug">{{ profile.first_seen | to_local('%d/%m/%y') }}</div>
+        {% if profile.is_archived %}
+        <span class="text-xs text-orange-500">gearchiveerd</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-600">
+  Geen naam-duplicaten gevonden.
+</div>
+{% endif %}
+
+{% endblock %}

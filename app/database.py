@@ -81,6 +81,7 @@ def init_db():
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN window_6_12 INTEGER NOT NULL DEFAULT 1"))
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN window_12_18 INTEGER NOT NULL DEFAULT 1"))
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN window_18_24 INTEGER NOT NULL DEFAULT 1"))
+    _migrate(text("ALTER TABLE scraper_settings ADD COLUMN filter_groups TEXT"))
     _migrate(text("""INSERT INTO visits (profile_id, visited_at, note)
         SELECT id, visited_at, visited_note FROM profiles
         WHERE is_visited = 1 AND visited_at IS NOT NULL

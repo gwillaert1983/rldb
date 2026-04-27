@@ -148,3 +148,4 @@ class ScraperSettings(Base):
     window_6_12             = Column(Integer, nullable=False, server_default="1")
     window_12_18            = Column(Integer, nullable=False, server_default="1")
     window_18_24            = Column(Integer, nullable=False, server_default="1")
+    filter_groups           = Column(Text, nullable=True)  # JSON array van filtergroepen
