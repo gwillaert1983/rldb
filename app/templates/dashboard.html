@@ -627,6 +627,10 @@ function _currentParams(page) {
   ['with_phone', 'with_photo'].forEach(k => {
     if (!p.has(k)) p.set(k, '0');
   });
+  // Remove empty-string params — int fields with no value cause 422 on the backend
+  for (const [k, v] of [...p.entries()]) {
+    if (v === '') p.delete(k);
+  }
   return p;
 }
 
