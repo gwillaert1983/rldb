@@ -353,6 +353,7 @@ def _dropdown_values(db, archived_only=False, contacted_only=False, visited_only
     _nationalities: set[str] = set()
     _languages: set[str] = set()
     _services: set[str] = set()
+    # Nationalities/languages scoped to current view; services always from all active profiles
     for (ed,) in (
         db.query(Profile.extra_data)
         .filter(*base_filter, Profile.extra_data.isnot(None), Profile.extra_data != "")
@@ -375,6 +376,23 @@ def _dropdown_values(db, archived_only=False, contacted_only=False, visited_only
                         _services.update(i.strip() for i in items if i.strip())
         except Exception:
             pass
+
+    # Services always from all active profiles (not scoped to subset)
+    if archived_only or contacted_only or visited_only or favourite_only:
+        for (ed,) in (
+            db.query(Profile.extra_data)
+            .filter(Profile.is_active == True, Profile.extra_data.isnot(None), Profile.extra_data != "")
+            .all()
+        ):
+            try:
+                d = json.loads(ed)
+                svcs = d.get("services", {})
+                if isinstance(svcs, dict):
+                    for items in svcs.values():
+                        if isinstance(items, list):
+                            _services.update(i.strip() for i in items if i.strip())
+            except Exception:
+                pass
 
     return {
         "distinct_locations": distinct_locations,
