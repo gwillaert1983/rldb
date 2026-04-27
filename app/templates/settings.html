@@ -183,6 +183,25 @@ function sliderSection(label, idMin, idMax, minV, maxV, curMin, curMax, fieldMin
   </div>`;
 }
 
+function sgFilterChips(inputId) {
+  const q = (document.getElementById(inputId)?.value || '').toLowerCase();
+  const wrap = document.getElementById(inputId)?.nextElementSibling;
+  if (!wrap) return;
+  wrap.querySelectorAll('button').forEach(btn => {
+    btn.style.display = btn.textContent.trim().toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function multiWithSearch(label, hint, arr, selected, field, i) {
+  const id = `sg-search-${field}-${i}`;
+  return `<div>
+    <label class="text-xs text-gray-500 mb-1 block">${label} <span class="text-gray-600">${hint}</span></label>
+    <input type="text" id="${id}" placeholder="Zoeken…" oninput="sgFilterChips('${id}')"
+           class="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1 text-xs text-white mb-1.5 focus:outline-none focus:border-blue-500">
+    <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">${chips(arr, selected, field, i)}</div>
+  </div>`;
+}
+
 function groupHTML(g, i) {
   const gd = g.genders || [], nd = g.nationalities || [], sd = g.services || [], ld = g.languages || [];
   return `<div class="bg-gray-800 rounded-xl p-4 space-y-3">
@@ -191,18 +210,15 @@ function groupHTML(g, i) {
       <button type="button" onclick="removeGroup(${i})" class="text-xs text-gray-600 hover:text-red-400 transition">✕ Verwijder groep</button>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      ${sliderSection('Leeftijd','sg-age-min','sg-age-max',18,99,g.age_min,g.age_max,'age_min','age_max',i)}
-      ${sliderSection('Gewicht max (kg)','sg-wt-min','sg-wt-max',30,200,null,g.weight_max,'weight_min','weight_max',i)}
-      ${sliderSection('Lengte max (cm)','sg-ht-min','sg-ht-max',140,210,null,g.height_max,'height_min','height_max',i)}
+      ${sliderSection('Leeftijd','sg-age-min','sg-age-max', 18, 50,  g.age_min,   g.age_max,    'age_min',   'age_max',    i)}
+      ${sliderSection('Gewicht max (kg)','sg-wt-min','sg-wt-max', 30, 90,  null,        g.weight_max, 'weight_min','weight_max',  i)}
+      ${sliderSection('Lengte max (cm)','sg-ht-min','sg-ht-max',140,180, null,        g.height_max, 'height_min','height_max',  i)}
     </div>
     <div><label class="text-xs text-gray-500 mb-1.5 block">Geslacht <span class="text-gray-600">(leeg = alle)</span></label>
       <div class="flex flex-wrap gap-1.5">${chips(GENDERS, gd, 'genders', i)}</div></div>
-    ${ALL_NATS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Nationaliteit <span class="text-gray-600">(leeg = alle)</span></label>
-      <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">${chips(ALL_NATS, nd, 'nationalities', i)}</div></div>` : ''}
-    ${ALL_LANGS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Taal <span class="text-gray-600">(leeg = alle)</span></label>
-      <div class="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">${chips(ALL_LANGS, ld, 'languages', i)}</div></div>` : ''}
-    ${ALL_SVCS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Mogelijkheden <span class="text-gray-600">(minstens 1 vereist)</span></label>
-      <div class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">${chips(ALL_SVCS, sd, 'services', i)}</div></div>` : ''}
+    ${ALL_NATS.length  ? multiWithSearch('Nationaliteit','(leeg = alle)', ALL_NATS,  nd, 'nationalities', i) : ''}
+    ${ALL_LANGS.length ? multiWithSearch('Taal',         '(leeg = alle)', ALL_LANGS, ld, 'languages',     i) : ''}
+    ${ALL_SVCS.length  ? multiWithSearch('Mogelijkheden','(≥1 vereist)',  ALL_SVCS,  sd, 'services',     i) : ''}
   </div>`;
 }
 

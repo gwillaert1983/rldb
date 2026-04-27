@@ -86,8 +86,8 @@
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
               <div id="fill-age" class="absolute h-full bg-blue-500 rounded-full"></div>
             </div>
-            <input type="range" id="sl-age-min" min="18" max="99" value="{{ age_min or 18 }}" class="dual-range w-full">
-            <input type="range" id="sl-age-max" min="18" max="99" value="{{ age_max or 99 }}" class="dual-range w-full">
+            <input type="range" id="sl-age-min" min="18" max="50" value="{{ age_min or 18 }}" class="dual-range w-full">
+            <input type="range" id="sl-age-max" min="18" max="50" value="{{ age_max or 50 }}" class="dual-range w-full">
           </div>
           <input type="hidden" name="age_min" id="age_min" value="{{ age_min or '' }}">
           <input type="hidden" name="age_max" id="age_max" value="{{ age_max or '' }}">
@@ -100,8 +100,8 @@
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
               <div id="fill-wt" class="absolute h-full bg-blue-500 rounded-full"></div>
             </div>
-            <input type="range" id="sl-wt-min" min="30" max="200" value="{{ weight_min or 30 }}" class="dual-range w-full">
-            <input type="range" id="sl-wt-max" min="30" max="200" value="{{ weight_max or 200 }}" class="dual-range w-full">
+            <input type="range" id="sl-wt-min" min="30" max="90" value="{{ weight_min or 30 }}" class="dual-range w-full">
+            <input type="range" id="sl-wt-max" min="30" max="90" value="{{ weight_max or 90 }}" class="dual-range w-full">
           </div>
           <input type="hidden" name="weight_min" id="weight_min" value="{{ weight_min or '' }}">
           <input type="hidden" name="weight_max" id="weight_max" value="{{ weight_max or '' }}">
@@ -114,8 +114,8 @@
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
               <div id="fill-ht" class="absolute h-full bg-blue-500 rounded-full"></div>
             </div>
-            <input type="range" id="sl-ht-min" min="140" max="210" value="{{ height_min or 140 }}" class="dual-range w-full">
-            <input type="range" id="sl-ht-max" min="140" max="210" value="{{ height_max or 210 }}" class="dual-range w-full">
+            <input type="range" id="sl-ht-min" min="140" max="180" value="{{ height_min or 140 }}" class="dual-range w-full">
+            <input type="range" id="sl-ht-max" min="140" max="180" value="{{ height_max or 180 }}" class="dual-range w-full">
           </div>
           <input type="hidden" name="height_min" id="height_min" value="{{ height_min or '' }}">
           <input type="hidden" name="height_max" id="height_max" value="{{ height_max or '' }}">
@@ -721,9 +721,9 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
     upd();
   }
   document.addEventListener('DOMContentLoaded', () => {
-    initSlider('sl-age-min','sl-age-max','fill-age','lbl-age','age_min','age_max',18,99);
-    initSlider('sl-wt-min','sl-wt-max','fill-wt','lbl-wt','weight_min','weight_max',30,200);
-    initSlider('sl-ht-min','sl-ht-max','fill-ht','lbl-ht','height_min','height_max',140,210);
+    initSlider('sl-age-min','sl-age-max','fill-age','lbl-age','age_min','age_max',18,50);
+    initSlider('sl-wt-min','sl-wt-max','fill-wt','lbl-wt','weight_min','weight_max',30,90);
+    initSlider('sl-ht-min','sl-ht-max','fill-ht','lbl-ht','height_min','height_max',140,180);
   });
 })();
 
