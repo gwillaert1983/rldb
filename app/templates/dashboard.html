@@ -738,23 +738,25 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
     let options, selected;
     try { options  = JSON.parse(el.dataset.options  || '[]'); } catch { options  = []; }
     try { selected = JSON.parse(el.dataset.selected || '[]'); } catch { selected = []; }
-    // Ensure array
     if (!Array.isArray(selected)) selected = selected ? [selected] : [];
+    selected = selected.filter(Boolean);
 
-    let open = false;
-    let query = '';
+    // ms eerst aanmaken — render() leest ms.open/query/selected (niet lokale kopieën)
+    const ms = { name, options, selected, open: false, query: '' };
 
     function render() {
-      const chips = selected.map(v =>
+      const chips = ms.selected.map(v =>
         `<span class="inline-flex items-center gap-0.5 bg-blue-600/30 text-blue-300 border border-blue-600/40 text-xs px-1.5 py-0.5 rounded-full">
-          ${v}<button type="button" class="hover:text-white leading-none" onclick="event.stopPropagation();msDeselect('${name}','${v.replace(/'/g,"\\'")}')">×</button>
+          ${v}<button type="button" class="hover:text-white leading-none ml-0.5"
+            onclick="event.stopPropagation();msDeselect('${name}','${v.replace(/'/g,"\\'")}')">×</button>
         </span>`).join('');
 
-      const filteredOpts = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
+      const filteredOpts = ms.options.filter(o => o.toLowerCase().includes(ms.query.toLowerCase()));
       const list = filteredOpts.map(o => {
-        const on = selected.includes(o);
+        const on = ms.selected.includes(o);
         return `<label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-gray-700 ${on?'text-blue-300':'text-gray-300'}" onclick="event.stopPropagation()">
-          <input type="checkbox" ${on?'checked':''} class="accent-blue-500 w-3.5 h-3.5" onchange="msToggle('${name}','${o.replace(/'/g,"\\'")}',this.checked)">
+          <input type="checkbox" ${on?'checked':''} class="accent-blue-500 w-3.5 h-3.5"
+            onchange="msToggle('${name}','${o.replace(/'/g,"\\'")}',this.checked)">
           <span class="text-xs truncate">${o}</span>
         </label>`;
       }).join('');
@@ -765,34 +767,39 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
                onclick="event.stopPropagation();msToggleOpen('${name}')">
             ${chips || `<span class="text-xs text-gray-600 self-center">Alle</span>`}
           </div>
-          <div class="${open?'':'hidden'} absolute top-full left-0 right-0 z-40 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+          <div class="${ms.open?'':'hidden'} absolute top-full left-0 right-0 z-40 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
+               onclick="event.stopPropagation()">
             <div class="p-2 border-b border-gray-800">
-              <input type="text" placeholder="Zoeken…" value="${query}"
+              <input type="text" placeholder="Zoeken…" value="${ms.query}"
                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white placeholder-gray-600 focus:outline-none"
                 oninput="msSearch('${name}',this.value)" onclick="event.stopPropagation()">
             </div>
             <div class="max-h-40 overflow-y-auto">${list || '<p class="text-xs text-gray-600 px-3 py-2">Geen resultaten</p>'}</div>
           </div>
         </div>
-        ${selected.map(v => `<input type="hidden" name="${name}" value="${v}">`).join('')}`;
+        ${ms.selected.map(v => `<input type="hidden" name="${name}" value="${v}">`).join('')}`;
     }
 
-    window[`_ms_${name}`] = { selected, options, open, query, render, el };
+    ms.render = render;
+    window[`_ms_${name}`] = ms;
     render();
   }
 
   window.msToggleOpen = function(name) {
     const ms = window[`_ms_${name}`];
+    if (!ms) return;
     ms.open = !ms.open;
     ms.render();
   };
   window.msSearch = function(name, q) {
     const ms = window[`_ms_${name}`];
+    if (!ms) return;
     ms.query = q;
     ms.render();
   };
   window.msToggle = function(name, val, checked) {
     const ms = window[`_ms_${name}`];
+    if (!ms) return;
     if (checked && !ms.selected.includes(val)) ms.selected.push(val);
     else ms.selected = ms.selected.filter(v => v !== val);
     ms.render();
@@ -800,15 +807,15 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
   };
   window.msDeselect = function(name, val) {
     const ms = window[`_ms_${name}`];
+    if (!ms) return;
     ms.selected = ms.selected.filter(v => v !== val);
     ms.render();
     _fetchProfiles(1, true);
   };
 
-  // Close on outside click
   document.addEventListener('click', () => {
-    ['nationality','language','service'].forEach(name => {
-      const ms = window[`_ms_${name}`];
+    ['nationality','language','service'].forEach(n => {
+      const ms = window[`_ms_${n}`];
       if (ms && ms.open) { ms.open = false; ms.render(); }
     });
   });
