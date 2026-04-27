@@ -895,24 +895,37 @@ async def swipe_page(
             except Exception: pass
         svcs_raw = extra.get("services", {})
         flat_svcs = []
+        svcs_by_cat = {}
         if isinstance(svcs_raw, dict):
-            for items in svcs_raw.values():
+            for cat, items in svcs_raw.items():
                 if isinstance(items, list):
-                    flat_svcs.extend(i.strip() for i in items if i.strip())
+                    clean = [i.strip() for i in items if i.strip()]
+                    if clean:
+                        svcs_by_cat[cat] = clean
+                        flat_svcs.extend(clean)
         langs = extra.get("languages", "")
         if isinstance(langs, list): langs = ", ".join(langs)
         data.append({
             "id": p.id,
             "name": p.display_name or p.username or "—",
             "location": p.location or "",
+            "phone": p.phone or "",
             "photos": [{"url": ph.r2_url, "thumb": ph.thumbnail_r2_url or ph.r2_url} for ph in p.photos],
             "age": extra.get("age", ""),
+            "gender": extra.get("gender", ""),
             "nationality": extra.get("nationality", ""),
+            "ethnicity": extra.get("ethnicity", ""),
             "height": extra.get("height", ""),
             "weight": extra.get("weight", ""),
+            "hair": extra.get("hair", ""),
+            "eyes": extra.get("eyes", ""),
             "languages": langs,
-            "services": flat_svcs[:20],
-            "bio": (p.bio or "").strip()[:400],
+            "price_incall": extra.get("price_incall", ""),
+            "price_outcall": extra.get("price_outcall", ""),
+            "price": p.price or "",
+            "services": flat_svcs[:30],
+            "services_by_cat": svcs_by_cat,
+            "bio": (p.bio or "").strip()[:600],
         })
     return templates.TemplateResponse("swipe.html", {
         "request": request,

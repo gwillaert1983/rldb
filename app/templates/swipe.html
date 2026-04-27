@@ -137,14 +137,94 @@ function showCard(idx) {
 
   // Details
   const details = document.getElementById('swipe-details');
-  const rows = [
-    p.height     && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Lengte</span><span class="text-gray-200">${p.height}</span></div>`,
-    p.weight     && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Gewicht</span><span class="text-gray-200">${p.weight}</span></div>`,
-    p.languages  && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Talen</span><span class="text-gray-200">${p.languages}</span></div>`,
-    p.services && p.services.length && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Mogelijkheden</span><div class="flex flex-wrap gap-1">${p.services.map(s=>`<span class="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full">${s}</span>`).join('')}</div></div>`,
-    p.bio        && `<div class="text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-3">${p.bio}</div>`,
+  let html = '';
+
+  // Stat grid: leeftijd / lengte / gewicht / nationaliteit
+  const stats = [
+    p.age         && {lbl:'Leeftijd',  val: p.age},
+    p.height      && {lbl:'Lengte',    val: p.height},
+    p.weight      && {lbl:'Gewicht',   val: p.weight},
+    p.nationality && {lbl:'Herkomst',  val: p.nationality},
+    p.ethnicity   && {lbl:'Etniciteit',val: p.ethnicity},
+    p.hair        && {lbl:'Haar',      val: p.hair},
+    p.eyes        && {lbl:'Ogen',      val: p.eyes},
+    p.gender      && {lbl:'Geslacht',  val: p.gender},
   ].filter(Boolean);
-  details.innerHTML = rows.join('') || '<p class="text-xs text-gray-600">Geen extra details beschikbaar.</p>';
+  if (stats.length) {
+    html += `<div class="grid grid-cols-2 gap-2">` +
+      stats.map(s => `<div class="bg-gray-900 rounded-lg px-3 py-2">
+        <div class="text-xs text-gray-500 mb-0.5">${s.lbl}</div>
+        <div class="text-sm text-white font-medium">${s.val}</div>
+      </div>`).join('') + `</div>`;
+  }
+
+  // Talen
+  if (p.languages) {
+    html += `<div class="flex gap-2 text-sm items-start">
+      <span class="text-gray-500 shrink-0 w-20">Talen</span>
+      <span class="text-gray-200">${p.languages}</span>
+    </div>`;
+  }
+
+  // Telefoon
+  if (p.phone) {
+    html += `<div class="flex gap-2 text-sm items-center">
+      <span class="text-gray-500 shrink-0 w-20">Telefoon</span>
+      <a href="tel:${p.phone}" class="text-blue-400 hover:text-blue-300 font-mono" onclick="event.stopPropagation()">${p.phone}</a>
+    </div>`;
+  }
+
+  // Prijs
+  const prijzen = [
+    p.price_incall  && `Incall: ${p.price_incall}`,
+    p.price_outcall && `Outcall: ${p.price_outcall}`,
+    (!p.price_incall && !p.price_outcall && p.price) && p.price,
+  ].filter(Boolean);
+  if (prijzen.length) {
+    html += `<div class="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+      <div class="text-xs text-gray-500 mb-1.5">Tarieven</div>
+      <div class="flex flex-wrap gap-3">` +
+        prijzen.map(pr => `<span class="text-sm text-green-400 font-medium">${pr}</span>`).join('') +
+      `</div>
+    </div>`;
+  }
+
+  // Mogelijkheden per categorie
+  if (p.services_by_cat && Object.keys(p.services_by_cat).length) {
+    html += `<div>
+      <div class="text-xs text-gray-500 mb-2">Mogelijkheden</div>
+      <div class="space-y-2">`;
+    for (const [cat, items] of Object.entries(p.services_by_cat)) {
+      html += `<div>
+        <div class="text-xs text-gray-600 mb-1">${cat}</div>
+        <div class="flex flex-wrap gap-1">${items.map(s =>
+          `<span class="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full border border-gray-700">${s}</span>`
+        ).join('')}</div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  } else if (p.services && p.services.length) {
+    html += `<div>
+      <div class="text-xs text-gray-500 mb-2">Mogelijkheden</div>
+      <div class="flex flex-wrap gap-1">${p.services.map(s =>
+        `<span class="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full border border-gray-700">${s}</span>`
+      ).join('')}</div>
+    </div>`;
+  }
+
+  // Bio
+  if (p.bio) {
+    html += `<div class="border-t border-gray-800 pt-4 text-sm text-gray-400 leading-relaxed">${p.bio}</div>`;
+  }
+
+  // Link naar volledig profiel
+  html += `<div class="border-t border-gray-800 pt-3">
+    <a href="/profile/${p.id}" class="text-xs text-blue-500 hover:text-blue-400 transition" onclick="event.stopPropagation()">
+      Volledig profiel bekijken →
+    </a>
+  </div>`;
+
+  details.innerHTML = html || '<p class="text-xs text-gray-600 py-2">Geen extra details beschikbaar.</p>';
 
   resetOverlays();
 }
