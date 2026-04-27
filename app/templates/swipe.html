@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Swipe — RLDB{% endblock %}
+{% block content %}
+
+<style>
+  #swipe-card {
+    touch-action: pan-y;
+    user-select: none;
+    will-change: transform;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+  #swipe-card.animating {
+    transition: transform 0.35s ease, opacity 0.35s ease;
+  }
+</style>
+
+<div class="flex flex-col items-center justify-center" style="height: calc(100vh - 6rem);">
+
+  <!-- Teller + terug -->
+  <div class="flex items-center justify-between w-full max-w-sm mb-3">
+    <a href="/" class="text-gray-500 hover:text-gray-300 text-sm transition">← Overzicht</a>
+    <span id="swipe-counter" class="text-xs text-gray-500 font-mono"></span>
+  </div>
+
+  <!-- Kaart -->
+  <div class="relative w-full max-w-sm" style="height: 70vh;">
+    <div id="swipe-card" class="absolute inset-0 rounded-2xl overflow-hidden bg-gray-900 border border-gray-800 cursor-grab active:cursor-grabbing">
+      <img id="swipe-photo" src="" alt="" class="w-full h-full object-cover">
+      <!-- Overlay links (archiveren) -->
+      <div id="overlay-left" class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-100"
+           style="background:rgba(251,146,60,0.5)">
+        <span class="text-white text-6xl font-bold drop-shadow-lg">✕</span>
+      </div>
+      <!-- Overlay rechts (favoriet) -->
+      <div id="overlay-right" class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-100"
+           style="background:rgba(250,204,21,0.5)">
+        <span class="text-white text-6xl font-bold drop-shadow-lg">★</span>
+      </div>
+      <!-- Info onderaan -->
+      <div class="absolute bottom-0 left-0 right-0 p-4"
+           style="background:linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)">
+        <a id="swipe-link" href="#" class="block">
+          <div id="swipe-name" class="text-white font-semibold text-lg leading-tight"></div>
+          <div id="swipe-sub"  class="text-gray-300 text-sm mt-0.5"></div>
+        </a>
+      </div>
+      <!-- Geen foto placeholder -->
+      <div id="swipe-nophoto" class="hidden absolute inset-0 flex items-center justify-center">
+        <span class="text-gray-700 text-4xl">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actieknoppen -->
+  <div class="flex items-center gap-6 mt-5">
+    <button onclick="doAction('archive')"
+            class="w-14 h-14 rounded-full border-2 border-orange-600 text-orange-400 hover:bg-orange-600/20 flex items-center justify-center text-2xl transition"
+            title="Archiveren">✕</button>
+    <button onclick="doAction('skip')"
+            class="w-10 h-10 rounded-full border border-gray-700 text-gray-500 hover:bg-gray-800 flex items-center justify-center text-lg transition"
+            title="Overslaan">→</button>
+    <button onclick="doAction('favourite')"
+            class="w-14 h-14 rounded-full border-2 border-yellow-500 text-yellow-400 hover:bg-yellow-600/20 flex items-center justify-center text-2xl transition"
+            title="Favoriet">★</button>
+  </div>
+
+  <!-- Klaar-melding -->
+  <div id="swipe-done" class="hidden text-center py-10">
+    <p class="text-gray-400 text-lg mb-2">Geen profielen meer</p>
+    <a href="/" class="text-blue-400 hover:text-blue-300 text-sm transition">← Terug naar overzicht</a>
+  </div>
+
+</div>
+
+<script>
+const _profiles = {{ profile_data_json | safe }};
+let _idx = 0;
+
+function showCard(idx) {
+  if (idx >= _profiles.length) {
+    document.getElementById('swipe-card').classList.add('hidden');
+    document.querySelectorAll('.flex.items-center.gap-6')[0]?.classList.add('hidden');
+    document.getElementById('swipe-done').classList.remove('hidden');
+    return;
+  }
+  const p = _profiles[idx];
+  const photo = document.getElementById('swipe-photo');
+  const nophoto = document.getElementById('swipe-nophoto');
+  if (p.photo) {
+    photo.src = p.photo;
+    photo.classList.remove('hidden');
+    nophoto.classList.add('hidden');
+  } else {
+    photo.classList.add('hidden');
+    nophoto.classList.remove('hidden');
+  }
+  document.getElementById('swipe-name').textContent = p.name;
+  const sub = [p.age, p.nationality, p.location].filter(Boolean).join(' · ');
+  document.getElementById('swipe-sub').textContent = sub;
+  document.getElementById('swipe-link').href = '/profile/' + p.id;
+  document.getElementById('swipe-counter').textContent = `${idx + 1} / ${_profiles.length}`;
+  const card = document.getElementById('swipe-card');
+  card.style.transform = '';
+  card.style.opacity = '1';
+  card.classList.remove('hidden', 'animating');
+  resetOverlays();
+}
+
+function resetOverlays() {
+  document.getElementById('overlay-left').style.opacity  = '0';
+  document.getElementById('overlay-right').style.opacity = '0';
+}
+
+async function doAction(type) {
+  const p = _profiles[_idx];
+  const card = document.getElementById('swipe-card');
+  card.classList.add('animating');
+  if (type === 'favourite') {
+    card.style.transform = 'translateX(120%) rotate(15deg)';
+    card.style.opacity = '0';
+    await fetch('/profile/' + p.id + '/favourite', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ set: true }),
+    });
+  } else if (type === 'archive') {
+    card.style.transform = 'translateX(-120%) rotate(-15deg)';
+    card.style.opacity = '0';
+    await fetch('/profile/' + p.id + '/archive', { method: 'POST' });
+  }
+  // skip: geen API call, gewoon volgende
+  setTimeout(() => { _idx++; showCard(_idx); }, type === 'skip' ? 0 : 320);
+}
+
+// Touch swipe
+(function() {
+  const card = document.getElementById('swipe-card');
+  const THRESHOLD = 80;
+  let sx = 0, sy = 0, dx = 0, active = false;
+
+  card.addEventListener('touchstart', e => {
+    sx = e.changedTouches[0].clientX;
+    sy = e.changedTouches[0].clientY;
+    dx = 0; active = false;
+    card.classList.remove('animating');
+  }, { passive: true });
+
+  card.addEventListener('touchmove', e => {
+    dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (!active && Math.abs(dy) > Math.abs(dx)) return;
+    active = true;
+    const rot = dx * 0.04;
+    card.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+    card.style.transition = 'none';
+    const pct = Math.min(Math.abs(dx) / THRESHOLD, 1);
+    if (dx > 0) {
+      document.getElementById('overlay-right').style.opacity = pct;
+      document.getElementById('overlay-left').style.opacity  = 0;
+    } else {
+      document.getElementById('overlay-left').style.opacity  = pct;
+      document.getElementById('overlay-right').style.opacity = 0;
+    }
+  }, { passive: true });
+
+  card.addEventListener('touchend', () => {
+    if (!active) return;
+    if (Math.abs(dx) >= THRESHOLD) {
+      doAction(dx > 0 ? 'favourite' : 'archive');
+    } else {
+      card.classList.add('animating');
+      card.style.transform = '';
+      card.style.opacity = '1';
+      resetOverlays();
+    }
+    active = false;
+  }, { passive: true });
+
+  // Mouse drag (desktop)
+  let dragging = false, msx = 0;
+  card.addEventListener('mousedown', e => { dragging = true; msx = e.clientX; dx = 0; card.classList.remove('animating'); });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    dx = e.clientX - msx;
+    card.style.transform = `translateX(${dx}px) rotate(${dx*0.04}deg)`;
+    card.style.transition = 'none';
+    const pct = Math.min(Math.abs(dx) / THRESHOLD, 1);
+    document.getElementById(dx > 0 ? 'overlay-right' : 'overlay-left').style.opacity = pct;
+    document.getElementById(dx > 0 ? 'overlay-left' : 'overlay-right').style.opacity = 0;
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    if (Math.abs(dx) >= THRESHOLD) doAction(dx > 0 ? 'favourite' : 'archive');
+    else { card.classList.add('animating'); card.style.transform = ''; card.style.opacity = '1'; resetOverlays(); }
+  });
+})();
+
+showCard(0);
+</script>
+{% endblock %}

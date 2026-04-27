@@ -23,34 +23,37 @@
   <nav class="bg-gray-900 border-b border-gray-800 px-5 flex items-center gap-0 shrink-0 h-11">
     <a href="/" class="font-bold text-white tracking-tight text-sm mr-5">RLDB</a>
 
-    <a href="/" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/' or path.startswith('/profile') %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Profielen
-    </a>
+    <!-- Profielen dropdown -->
+    {% set prof_active = path in ['/', '/archived', '/favorieten', '/duplicaten'] or path.startswith('/profile') %}
+    <div class="relative" id="nav-profielen">
+      <button class="px-3 h-11 flex items-center gap-1 text-sm border-b-2 transition
+        {% if prof_active %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+        Profielen <span class="text-[10px] opacity-50 mt-0.5">▾</span>
+      </button>
+      <div class="nav-dropdown absolute top-11 left-0 hidden bg-gray-900 border border-gray-800 rounded-xl shadow-2xl py-1.5 min-w-40 z-50">
+        <a href="/"           class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Alle profielen</a>
+        <a href="/favorieten" class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/favorieten' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Favorieten</a>
+        <a href="/archived"   class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/archived' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Archief</a>
+        <a href="/duplicaten" class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/duplicaten' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Duplicaten</a>
+      </div>
+    </div>
 
-    <a href="/archived" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/archived' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Archief
-    </a>
+    <!-- Activiteit dropdown -->
+    {% set act_active = path in ['/gecontacteerd', '/bezocht'] %}
+    <div class="relative" id="nav-activiteit">
+      <button class="px-3 h-11 flex items-center gap-1 text-sm border-b-2 transition
+        {% if act_active %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+        Activiteit <span class="text-[10px] opacity-50 mt-0.5">▾</span>
+      </button>
+      <div class="nav-dropdown absolute top-11 left-0 hidden bg-gray-900 border border-gray-800 rounded-xl shadow-2xl py-1.5 min-w-36 z-50">
+        <a href="/gecontacteerd" class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/gecontacteerd' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Gecontacteerd</a>
+        <a href="/bezocht"       class="flex items-center gap-2 px-4 py-2 text-sm {% if path == '/bezocht' %}text-white{% else %}text-gray-400 hover:text-white hover:bg-gray-800{% endif %}">Bezocht</a>
+      </div>
+    </div>
 
-    <a href="/gecontacteerd" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/gecontacteerd' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Gecontacteerd
-    </a>
-
-    <a href="/bezocht" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/bezocht' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Bezocht
-    </a>
-
-    <a href="/favorieten" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/favorieten' %}border-yellow-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Favorieten
-    </a>
-
-    <a href="/duplicaten" class="px-3 h-11 flex items-center text-sm transition border-b-2
-       {% if path == '/duplicaten' %}border-blue-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
-      Duplicaten
+    <a href="/swipe" class="px-3 h-11 flex items-center text-sm transition border-b-2
+       {% if path == '/swipe' %}border-purple-500 text-white{% else %}border-transparent text-gray-400 hover:text-gray-200{% endif %}">
+      Swipe
     </a>
 
     <a href="/status" class="px-3 h-11 flex items-center gap-1.5 text-sm transition border-b-2
@@ -76,6 +79,19 @@
   </main>
 
   <script>
+  // Nav dropdowns — click-toggle voor touch
+  (function() {
+    document.querySelectorAll('[id^="nav-"]').forEach(el => {
+      const btn  = el.querySelector('button');
+      const menu = el.querySelector('.nav-dropdown');
+      if (!btn || !menu) return;
+      btn.addEventListener('click', e => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+    });
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.nav-dropdown').forEach(m => m.classList.add('hidden'));
+    });
+  })();
+
   (function () {
     function refreshBadge() {
       fetch('/status/data')

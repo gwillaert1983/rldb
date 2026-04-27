@@ -2,11 +2,12 @@ import json
 import math
 import pytz
 from datetime import datetime, timedelta
+from typing import List
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import exists, func
+from sqlalchemy import cast, exists, func, or_, Integer as SAInteger
 
 from app.dependencies import get_db, require_login
 from app.models import Advertisement, Profile, ScrapeRun, Visit
@@ -230,7 +231,14 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
                           run_id="", run_filter="",
                           contacted_only=False, visited_only=False,
                           favourite_only=False, hide_favourites=False,
-                          service=""):
+                          service="",
+                          age_min=None, age_max=None,
+                          weight_min=None, weight_max=None,
+                          height_min=None, height_max=None):
+    # Normalize str → list for multi-select params
+    if isinstance(nationality, str): nationality = [nationality] if nationality else []
+    if isinstance(language,    str): language    = [language]    if language    else []
+    if isinstance(service,     str): service     = [service]     if service     else []
     query = db.query(Profile).filter(Profile.is_active == True)
     if archived_only:
         query = query.filter(Profile.is_archived == True)
@@ -260,11 +268,23 @@ def _build_profile_query(db, q, gender, location, province, nationality, languag
     elif location:
         query = query.filter(Profile.location == location)
     if nationality:
-        query = query.filter(Profile.extra_data.ilike(f'%"nationality": "{nationality}"%'))
+        query = query.filter(or_(*[Profile.extra_data.ilike(f'%"nationality": "{n}"%') for n in nationality]))
     if language:
-        query = query.filter(Profile.extra_data.ilike(f'%"languages":%{language}%'))
+        query = query.filter(or_(*[Profile.extra_data.ilike(f'%"languages":%{lang}%') for lang in language]))
     if service:
-        query = query.filter(Profile.extra_data.ilike(f'%"{service}"%'))
+        query = query.filter(or_(*[Profile.extra_data.ilike(f'%"{svc}"%') for svc in service]))
+    if age_min is not None or age_max is not None:
+        age_col = cast(func.json_extract(Profile.extra_data, '$.age'), SAInteger)
+        if age_min is not None: query = query.filter(age_col >= age_min)
+        if age_max is not None: query = query.filter(age_col <= age_max)
+    if weight_min is not None or weight_max is not None:
+        wt_col = cast(func.json_extract(Profile.extra_data, '$.weight'), SAInteger)
+        if weight_min is not None: query = query.filter(wt_col >= weight_min)
+        if weight_max is not None: query = query.filter(wt_col <= weight_max)
+    if height_min is not None or height_max is not None:
+        ht_col = cast(func.json_extract(Profile.extra_data, '$.height'), SAInteger)
+        if height_min is not None: query = query.filter(ht_col >= height_min)
+        if height_max is not None: query = query.filter(ht_col <= height_max)
     if ad_category:
         query = query.filter(
             exists().where(
@@ -372,8 +392,8 @@ async def profile_list(
     q: str = Query(""),
     gender: str = Query(""),
     location: str = Query(""),
-    nationality: str = Query(""),
-    language: str = Query(""),
+    nationality: List[str] = Query([]),
+    language: List[str] = Query([]),
     province: str = Query(""),
     ad_category: str = Query(""),
     ad_location: str = Query(""),
@@ -381,9 +401,15 @@ async def profile_list(
     with_photo: int = Query(0),
     show_archived: int = Query(0),
     show_favourites: int = Query(0),
-    service: str = Query(""),
+    service: List[str] = Query([]),
     run_id: str = Query(""),
     run_filter: str = Query(""),
+    age_min: int = Query(None),
+    age_max: int = Query(None),
+    weight_min: int = Query(None),
+    weight_max: int = Query(None),
+    height_min: int = Query(None),
+    height_max: int = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_login),
 ):
@@ -420,6 +446,9 @@ async def profile_list(
         hide_favourites=not bool(show_favourites),
         service=service,
         run_id=run_id, run_filter=run_filter,
+        age_min=age_min, age_max=age_max,
+        weight_min=weight_min, weight_max=weight_max,
+        height_min=height_min, height_max=height_max,
     )
     total = query.count()
     profiles = (
@@ -430,9 +459,9 @@ async def profile_list(
     )
     total_pages = math.ceil(total / PAGE_SIZE) if total else 1
     filters_active = bool(
-        gender or location or province or nationality or language
-        or ad_category or ad_location
-        or with_phone or with_photo or show_archived or service
+        gender or location or province or nationality or language or service
+        or ad_category or ad_location or with_phone or with_photo or show_archived
+        or age_min or age_max or weight_min or weight_max or height_min or height_max
     )
 
     return templates.TemplateResponse(
@@ -457,6 +486,9 @@ async def profile_list(
             "show_archived": show_archived,
             "show_favourites": show_favourites,
             "service": service,
+            "age_min": age_min, "age_max": age_max,
+            "weight_min": weight_min, "weight_max": weight_max,
+            "height_min": height_min, "height_max": height_max,
             "filters_active": filters_active,
             "archive_view": False,
             "contacted_view": False,
@@ -822,6 +854,41 @@ async def duplicates_page(
     })
 
 
+@router.get("/swipe", response_class=HTMLResponse)
+async def swipe_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_login),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+    profiles = (
+        db.query(Profile)
+        .filter(Profile.is_active == True, Profile.is_archived != True, Profile.is_favourite != True)
+        .order_by(Profile.last_scraped.desc())
+        .limit(30)
+        .all()
+    )
+    data = []
+    for p in profiles:
+        extra = {}
+        if p.extra_data:
+            try: extra = json.loads(p.extra_data)
+            except Exception: pass
+        data.append({
+            "id": p.id,
+            "name": p.display_name or p.username or "—",
+            "location": p.location or "",
+            "photo": p.photos[0].r2_url if p.photos else None,
+            "age": extra.get("age", ""),
+            "nationality": extra.get("nationality", ""),
+        })
+    return templates.TemplateResponse("swipe.html", {
+        "request": request,
+        "profile_data_json": json.dumps(data, ensure_ascii=False),
+    })
+
+
 @router.get("/profiles/more", response_class=JSONResponse)
 async def profiles_more(
     request: Request,
@@ -829,8 +896,8 @@ async def profiles_more(
     q: str = Query(""),
     gender: str = Query(""),
     location: str = Query(""),
-    nationality: str = Query(""),
-    language: str = Query(""),
+    nationality: List[str] = Query([]),
+    language: List[str] = Query([]),
     province: str = Query(""),
     ad_category: str = Query(""),
     ad_location: str = Query(""),
@@ -841,9 +908,15 @@ async def profiles_more(
     contacted_only: int = Query(0),
     visited_only: int = Query(0),
     favourite_only: int = Query(0),
-    service: str = Query(""),
+    service: List[str] = Query([]),
     run_id: str = Query(""),
     run_filter: str = Query(""),
+    age_min: int = Query(None),
+    age_max: int = Query(None),
+    weight_min: int = Query(None),
+    weight_max: int = Query(None),
+    height_min: int = Query(None),
+    height_max: int = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_login),
 ):
@@ -858,6 +931,9 @@ async def profiles_more(
         favourite_only=bool(favourite_only),
         service=service,
         run_id=run_id, run_filter=run_filter,
+        age_min=age_min, age_max=age_max,
+        weight_min=weight_min, weight_max=weight_max,
+        height_min=height_min, height_max=height_max,
     )
     total = query.count()
     profiles = (
