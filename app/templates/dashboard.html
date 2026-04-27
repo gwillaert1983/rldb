@@ -749,7 +749,7 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
       const filteredOpts = options.filter(o => o.toLowerCase().includes(query.toLowerCase()));
       const list = filteredOpts.map(o => {
         const on = selected.includes(o);
-        return `<label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-gray-700 ${on?'text-blue-300':'text-gray-300'}">
+        return `<label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-gray-700 ${on?'text-blue-300':'text-gray-300'}" onclick="event.stopPropagation()">
           <input type="checkbox" ${on?'checked':''} class="accent-blue-500 w-3.5 h-3.5" onchange="msToggle('${name}','${o.replace(/'/g,"\\'")}',this.checked)">
           <span class="text-xs truncate">${o}</span>
         </label>`;
@@ -758,10 +758,10 @@ window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); }
       el.innerHTML = `
         <div class="relative">
           <div class="min-h-[30px] bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 flex flex-wrap gap-1 cursor-pointer"
-               onclick="msToggleOpen('${name}')">
+               onclick="event.stopPropagation();msToggleOpen('${name}')">
             ${chips || `<span class="text-xs text-gray-600 self-center">Alle</span>`}
           </div>
-          <div class="${open?'':'hidden'} absolute top-full left-0 right-0 z-40 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+          <div class="${open?'':'hidden'} absolute top-full left-0 right-0 z-40 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
             <div class="p-2 border-b border-gray-800">
               <input type="text" placeholder="Zoeken…" value="${query}"
                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white placeholder-gray-600 focus:outline-none"
