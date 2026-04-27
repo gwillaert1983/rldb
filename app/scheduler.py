@@ -134,6 +134,18 @@ def _matches_group(extra: dict, g: dict) -> bool:
     if nationalities and str(extra.get("nationality", "")).strip() not in nationalities:
         return False
 
+    languages = g.get("languages") or []
+    if languages:
+        raw_langs = extra.get("languages", "")
+        if isinstance(raw_langs, list):
+            flat_langs = {l.strip() for l in raw_langs if l.strip()}
+        elif isinstance(raw_langs, str):
+            flat_langs = {l.strip() for l in raw_langs.split(",") if l.strip()}
+        else:
+            flat_langs = set()
+        if not any(lang in flat_langs for lang in languages):
+            return False
+
     services = g.get("services") or []
     if services:
         raw_svcs = extra.get("services", {})

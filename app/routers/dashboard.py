@@ -875,13 +875,26 @@ async def swipe_page(
         if p.extra_data:
             try: extra = json.loads(p.extra_data)
             except Exception: pass
+        svcs_raw = extra.get("services", {})
+        flat_svcs = []
+        if isinstance(svcs_raw, dict):
+            for items in svcs_raw.values():
+                if isinstance(items, list):
+                    flat_svcs.extend(i.strip() for i in items if i.strip())
+        langs = extra.get("languages", "")
+        if isinstance(langs, list): langs = ", ".join(langs)
         data.append({
             "id": p.id,
             "name": p.display_name or p.username or "—",
             "location": p.location or "",
-            "photo": p.photos[0].r2_url if p.photos else None,
+            "photos": [{"url": ph.r2_url, "thumb": ph.thumbnail_r2_url or ph.r2_url} for ph in p.photos],
             "age": extra.get("age", ""),
             "nationality": extra.get("nationality", ""),
+            "height": extra.get("height", ""),
+            "weight": extra.get("weight", ""),
+            "languages": langs,
+            "services": flat_svcs[:20],
+            "bio": (p.bio or "").strip()[:400],
         })
     return templates.TemplateResponse("swipe.html", {
         "request": request,

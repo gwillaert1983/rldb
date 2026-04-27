@@ -124,10 +124,16 @@
 
 </form>
 
+<style>
+.dual-range-s{position:absolute;width:100%;appearance:none;-webkit-appearance:none;background:transparent;pointer-events:none;height:24px}
+.dual-range-s::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#3b82f6;pointer-events:all;cursor:pointer;box-shadow:0 0 0 2px #1e3a5f}
+.dual-range-s::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#3b82f6;pointer-events:all;cursor:pointer;border:none}
+</style>
 <script>
 const GENDERS  = ['Vrouw', 'Man', 'Transseksueel'];
-const ALL_NATS = {{ distinct_nationalities | tojson }};
-const ALL_SVCS = {{ distinct_services | tojson }};
+const ALL_NATS  = {{ distinct_nationalities | tojson }};
+const ALL_SVCS  = {{ distinct_services | tojson }};
+const ALL_LANGS = {{ distinct_languages | tojson }};
 let _groups = [];
 
 function loadGroups() {
@@ -156,42 +162,71 @@ function chips(arr, selected, field, idx) {
   }).join('');
 }
 
+function sliderSection(label, idMin, idMax, minV, maxV, curMin, curMax, fieldMin, fieldMax, i) {
+  const lo = curMin || minV, hi = curMax || maxV;
+  const pctLo = (lo - minV) / (maxV - minV) * 100;
+  const pctHi = (hi - minV) / (maxV - minV) * 100;
+  const lbl = (lo === minV && hi === maxV) ? '' : `${lo}–${hi}`;
+  return `<div>
+    <label class="text-xs text-gray-500 mb-1 block">${label} <span id="${idMin}-lbl-${i}" class="text-gray-400 font-mono">${lbl}</span></label>
+    <div class="relative h-6 flex items-center">
+      <div class="absolute left-0 right-0 h-1 rounded-full bg-gray-600 pointer-events-none">
+        <div id="${idMin}-fill-${i}" class="absolute h-full bg-blue-500 rounded-full" style="left:${pctLo}%;right:${100-pctHi}%"></div>
+      </div>
+      <input type="range" min="${minV}" max="${maxV}" value="${lo}" id="${idMin}-${i}"
+        oninput="sgUpd(${i},'${fieldMin}','${fieldMax}','${idMin}','${idMax}')"
+        class="dual-range-s w-full">
+      <input type="range" min="${minV}" max="${maxV}" value="${hi}" id="${idMax}-${i}"
+        oninput="sgUpd(${i},'${fieldMin}','${fieldMax}','${idMin}','${idMax}')"
+        class="dual-range-s w-full">
+    </div>
+  </div>`;
+}
+
 function groupHTML(g, i) {
-  const gd = g.genders || [], nd = g.nationalities || [], sd = g.services || [];
+  const gd = g.genders || [], nd = g.nationalities || [], sd = g.services || [], ld = g.languages || [];
   return `<div class="bg-gray-800 rounded-xl p-4 space-y-3">
     <div class="flex items-center justify-between">
       <span class="text-xs font-medium text-gray-300">Groep ${i+1}</span>
       <button type="button" onclick="removeGroup(${i})" class="text-xs text-gray-600 hover:text-red-400 transition">✕ Verwijder groep</button>
     </div>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <div><label class="text-xs text-gray-500 mb-1 block">Leeftijd min</label>
-        <input type="number" min="18" max="99" placeholder="—" value="${g.age_min||''}"
-          oninput="setField(${i},'age_min',this.value?+this.value:null)"
-          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
-      <div><label class="text-xs text-gray-500 mb-1 block">Leeftijd max</label>
-        <input type="number" min="18" max="99" placeholder="—" value="${g.age_max||''}"
-          oninput="setField(${i},'age_max',this.value?+this.value:null)"
-          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
-      <div><label class="text-xs text-gray-500 mb-1 block">Gewicht max (kg)</label>
-        <input type="number" min="30" max="200" placeholder="—" value="${g.weight_max||''}"
-          oninput="setField(${i},'weight_max',this.value?+this.value:null)"
-          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
-      <div><label class="text-xs text-gray-500 mb-1 block">Lengte max (cm)</label>
-        <input type="number" min="140" max="210" placeholder="—" value="${g.height_max||''}"
-          oninput="setField(${i},'height_max',this.value?+this.value:null)"
-          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      ${sliderSection('Leeftijd','sg-age-min','sg-age-max',18,99,g.age_min,g.age_max,'age_min','age_max',i)}
+      ${sliderSection('Gewicht max (kg)','sg-wt-min','sg-wt-max',30,200,null,g.weight_max,'weight_min','weight_max',i)}
+      ${sliderSection('Lengte max (cm)','sg-ht-min','sg-ht-max',140,210,null,g.height_max,'height_min','height_max',i)}
     </div>
     <div><label class="text-xs text-gray-500 mb-1.5 block">Geslacht <span class="text-gray-600">(leeg = alle)</span></label>
       <div class="flex flex-wrap gap-1.5">${chips(GENDERS, gd, 'genders', i)}</div></div>
     ${ALL_NATS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Nationaliteit <span class="text-gray-600">(leeg = alle)</span></label>
       <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">${chips(ALL_NATS, nd, 'nationalities', i)}</div></div>` : ''}
+    ${ALL_LANGS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Taal <span class="text-gray-600">(leeg = alle)</span></label>
+      <div class="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">${chips(ALL_LANGS, ld, 'languages', i)}</div></div>` : ''}
     ${ALL_SVCS.length ? `<div><label class="text-xs text-gray-500 mb-1.5 block">Mogelijkheden <span class="text-gray-600">(minstens 1 vereist)</span></label>
       <div class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">${chips(ALL_SVCS, sd, 'services', i)}</div></div>` : ''}
   </div>`;
 }
 
+// Slider update voor instellingen-groepen
+function sgUpd(i, fMin, fMax, idMin, idMax) {
+  let lo = +document.getElementById(idMin+'-'+i).value;
+  let hi = +document.getElementById(idMax+'-'+i).value;
+  if (lo > hi) { document.getElementById(idMin+'-'+i).value = lo = hi; }
+  if (hi < lo) { document.getElementById(idMax+'-'+i).value = hi = lo; }
+  const fill = document.getElementById(idMin+'-fill-'+i);
+  const lbl  = document.getElementById(idMin+'-lbl-'+i);
+  const slMin = document.getElementById(idMin+'-'+i);
+  const minV = +slMin.min, maxV = +slMin.max;
+  const pct = v => (v - minV)/(maxV - minV)*100;
+  if (fill) { fill.style.left = pct(lo)+'%'; fill.style.right = (100-pct(hi))+'%'; }
+  if (lbl)  lbl.textContent = (lo===minV && hi===maxV) ? '' : `${lo}–${hi}`;
+  // Sla op in group — alleen afwijkende waarden
+  _groups[i][fMin] = lo > minV ? lo : null;
+  _groups[i][fMax] = hi < maxV ? hi : null;
+  syncJSON();
+}
+
 function addGroup() {
-  _groups.push({age_min:null,age_max:null,weight_max:null,height_max:null,genders:[],nationalities:[],services:[]});
+  _groups.push({age_min:null,age_max:null,weight_min:null,weight_max:null,height_min:null,height_max:null,genders:[],nationalities:[],languages:[],services:[]});
   renderGroups();
 }
 function removeGroup(i) { _groups.splice(i,1); renderGroups(); }

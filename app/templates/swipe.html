@@ -3,70 +3,81 @@
 {% block content %}
 
 <style>
-  #swipe-card {
-    touch-action: pan-y;
-    user-select: none;
-    will-change: transform;
-    transition: transform 0.15s ease, opacity 0.15s ease;
-  }
-  #swipe-card.animating {
-    transition: transform 0.35s ease, opacity 0.35s ease;
-  }
+/* Swipe-pagina vult de beschikbare hoogte */
+#swipe-root { height: calc(100vh - 44px - 2.5rem); display: flex; flex-direction: column; margin: -1.25rem; }
+#swipe-card { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; scroll-behavior: smooth; }
+#swipe-card.swiping { overflow-y: hidden; }
+#swipe-photo-area { position: relative; flex-shrink: 0; height: 65vh; min-height: 320px; }
+#swipe-photo-area img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.swipe-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+#overlay-left  { background: rgba(251,146,60,0.55); }
+#overlay-right { background: rgba(250,204,21,0.55); }
+#swipe-card { will-change: transform; }
 </style>
 
-<div class="flex flex-col items-center justify-center" style="height: calc(100vh - 6rem);">
+<div id="swipe-root">
 
-  <!-- Teller + terug -->
-  <div class="flex items-center justify-between w-full max-w-sm mb-3">
-    <a href="/" class="text-gray-500 hover:text-gray-300 text-sm transition">← Overzicht</a>
+  <!-- Topbar -->
+  <div class="flex items-center justify-between px-4 py-2.5 shrink-0 border-b border-gray-800 bg-gray-950">
+    <a href="/" class="text-gray-500 hover:text-gray-300 text-sm transition">← Terug</a>
     <span id="swipe-counter" class="text-xs text-gray-500 font-mono"></span>
-  </div>
-
-  <!-- Kaart -->
-  <div class="relative w-full max-w-sm" style="height: 70vh;">
-    <div id="swipe-card" class="absolute inset-0 rounded-2xl overflow-hidden bg-gray-900 border border-gray-800 cursor-grab active:cursor-grabbing">
-      <img id="swipe-photo" src="" alt="" class="w-full h-full object-cover">
-      <!-- Overlay links (archiveren) -->
-      <div id="overlay-left" class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-100"
-           style="background:rgba(251,146,60,0.5)">
-        <span class="text-white text-6xl font-bold drop-shadow-lg">✕</span>
-      </div>
-      <!-- Overlay rechts (favoriet) -->
-      <div id="overlay-right" class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-100"
-           style="background:rgba(250,204,21,0.5)">
-        <span class="text-white text-6xl font-bold drop-shadow-lg">★</span>
-      </div>
-      <!-- Info onderaan -->
-      <div class="absolute bottom-0 left-0 right-0 p-4"
-           style="background:linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)">
-        <a id="swipe-link" href="#" class="block">
-          <div id="swipe-name" class="text-white font-semibold text-lg leading-tight"></div>
-          <div id="swipe-sub"  class="text-gray-300 text-sm mt-0.5"></div>
-        </a>
-      </div>
-      <!-- Geen foto placeholder -->
-      <div id="swipe-nophoto" class="hidden absolute inset-0 flex items-center justify-center">
-        <span class="text-gray-700 text-4xl">—</span>
-      </div>
+    <div class="flex gap-2">
+      <button onclick="doAction('archive')"
+              class="w-8 h-8 rounded-full border border-orange-700 text-orange-400 hover:bg-orange-700/20 flex items-center justify-center text-base transition"
+              title="Archiveren">✕</button>
+      <button onclick="doAction('favourite')"
+              class="w-8 h-8 rounded-full border border-yellow-600 text-yellow-400 hover:bg-yellow-600/20 flex items-center justify-center text-base transition"
+              title="Favoriet">★</button>
     </div>
   </div>
 
-  <!-- Actieknoppen -->
-  <div class="flex items-center gap-6 mt-5">
+  <!-- Scrollbare kaart -->
+  <div id="swipe-card">
+
+    <!-- Hoofdfoto met swipe-detectie -->
+    <div id="swipe-photo-area">
+      <img id="swipe-photo" src="" alt="">
+      <div id="swipe-nophoto" class="hidden absolute inset-0 bg-gray-900 flex items-center justify-center">
+        <span class="text-gray-700 text-5xl">—</span>
+      </div>
+      <div id="overlay-left"  class="swipe-overlay"><span class="text-white text-7xl font-bold drop-shadow-lg">✕</span></div>
+      <div id="overlay-right" class="swipe-overlay"><span class="text-white text-7xl font-bold drop-shadow-lg">★</span></div>
+      <!-- Naam overlay -->
+      <div class="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-12"
+           style="background:linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 100%)">
+        <a id="swipe-link" href="#" onclick="return false">
+          <div id="swipe-name" class="text-white font-bold text-xl leading-tight"></div>
+          <div id="swipe-sub"  class="text-gray-300 text-sm mt-0.5"></div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Extra foto's -->
+    <div id="swipe-thumbs" class="hidden flex gap-2 p-3 overflow-x-auto bg-gray-900 border-b border-gray-800 shrink-0"></div>
+
+    <!-- Profieldetails -->
+    <div id="swipe-details" class="p-4 space-y-4 bg-gray-950 pb-6"></div>
+
+  </div>
+
+  <!-- Actieknoppen onderaan -->
+  <div class="flex items-center justify-center gap-6 py-3 shrink-0 border-t border-gray-800 bg-gray-950">
     <button onclick="doAction('archive')"
-            class="w-14 h-14 rounded-full border-2 border-orange-600 text-orange-400 hover:bg-orange-600/20 flex items-center justify-center text-2xl transition"
-            title="Archiveren">✕</button>
+            class="flex items-center gap-2 px-5 py-2.5 rounded-full border-2 border-orange-600 text-orange-400 hover:bg-orange-600/20 text-sm font-medium transition">
+      ✕ Archiveren
+    </button>
     <button onclick="doAction('skip')"
             class="w-10 h-10 rounded-full border border-gray-700 text-gray-500 hover:bg-gray-800 flex items-center justify-center text-lg transition"
             title="Overslaan">→</button>
     <button onclick="doAction('favourite')"
-            class="w-14 h-14 rounded-full border-2 border-yellow-500 text-yellow-400 hover:bg-yellow-600/20 flex items-center justify-center text-2xl transition"
-            title="Favoriet">★</button>
+            class="flex items-center gap-2 px-5 py-2.5 rounded-full border-2 border-yellow-500 text-yellow-400 hover:bg-yellow-600/20 text-sm font-medium transition">
+      ★ Favoriet
+    </button>
   </div>
 
-  <!-- Klaar-melding -->
-  <div id="swipe-done" class="hidden text-center py-10">
-    <p class="text-gray-400 text-lg mb-2">Geen profielen meer</p>
+  <!-- Klaar -->
+  <div id="swipe-done" class="hidden flex-1 flex flex-col items-center justify-center gap-3 py-16">
+    <p class="text-gray-400 text-xl">Geen profielen meer</p>
     <a href="/" class="text-blue-400 hover:text-blue-300 text-sm transition">← Terug naar overzicht</a>
   </div>
 
@@ -79,32 +90,68 @@ let _idx = 0;
 function showCard(idx) {
   if (idx >= _profiles.length) {
     document.getElementById('swipe-card').classList.add('hidden');
-    document.querySelectorAll('.flex.items-center.gap-6')[0]?.classList.add('hidden');
+    document.querySelectorAll('#swipe-root > div:not(#swipe-done):not(:first-child)').forEach(el => el.classList.add('hidden'));
     document.getElementById('swipe-done').classList.remove('hidden');
     return;
   }
   const p = _profiles[idx];
-  const photo = document.getElementById('swipe-photo');
-  const nophoto = document.getElementById('swipe-nophoto');
-  if (p.photo) {
-    photo.src = p.photo;
+  const card = document.getElementById('swipe-card');
+  card.scrollTo(0, 0);
+  card.style.transform = '';
+  card.style.opacity   = '1';
+  card.classList.remove('hidden', 'swiping');
+
+  // Foto
+  const photo    = document.getElementById('swipe-photo');
+  const nophoto  = document.getElementById('swipe-nophoto');
+  if (p.photos && p.photos.length > 0) {
+    photo.src = p.photos[0].url;
     photo.classList.remove('hidden');
     nophoto.classList.add('hidden');
   } else {
     photo.classList.add('hidden');
     nophoto.classList.remove('hidden');
   }
+
+  // Naam + sub
   document.getElementById('swipe-name').textContent = p.name;
   const sub = [p.age, p.nationality, p.location].filter(Boolean).join(' · ');
   document.getElementById('swipe-sub').textContent = sub;
   document.getElementById('swipe-link').href = '/profile/' + p.id;
   document.getElementById('swipe-counter').textContent = `${idx + 1} / ${_profiles.length}`;
-  const card = document.getElementById('swipe-card');
-  card.style.transform = '';
-  card.style.opacity = '1';
-  card.classList.remove('hidden', 'animating');
+
+  // Extra foto's
+  const thumbs = document.getElementById('swipe-thumbs');
+  if (p.photos && p.photos.length > 1) {
+    thumbs.classList.remove('hidden');
+    thumbs.classList.add('flex');
+    thumbs.innerHTML = p.photos.map((ph, pi) =>
+      `<button onclick="setSwipePhoto('${ph.url}')" class="shrink-0 w-16 h-20 overflow-hidden rounded-lg border-2 ${pi===0?'border-blue-500':'border-transparent hover:border-gray-500'}">
+        <img src="${ph.thumb}" class="w-full h-full object-cover">
+      </button>`
+    ).join('');
+  } else {
+    thumbs.classList.add('hidden');
+    thumbs.classList.remove('flex');
+  }
+
+  // Details
+  const details = document.getElementById('swipe-details');
+  const rows = [
+    p.height     && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Lengte</span><span class="text-gray-200">${p.height}</span></div>`,
+    p.weight     && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Gewicht</span><span class="text-gray-200">${p.weight}</span></div>`,
+    p.languages  && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Talen</span><span class="text-gray-200">${p.languages}</span></div>`,
+    p.services && p.services.length && `<div class="flex gap-2 text-sm"><span class="text-gray-500 w-24 shrink-0">Mogelijkheden</span><div class="flex flex-wrap gap-1">${p.services.map(s=>`<span class="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full">${s}</span>`).join('')}</div></div>`,
+    p.bio        && `<div class="text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-3">${p.bio}</div>`,
+  ].filter(Boolean);
+  details.innerHTML = rows.join('') || '<p class="text-xs text-gray-600">Geen extra details beschikbaar.</p>';
+
   resetOverlays();
 }
+
+window.setSwipePhoto = function(url) {
+  document.getElementById('swipe-photo').src = url;
+};
 
 function resetOverlays() {
   document.getElementById('overlay-left').style.opacity  = '0';
@@ -112,77 +159,79 @@ function resetOverlays() {
 }
 
 async function doAction(type) {
+  if (_idx >= _profiles.length) return;
   const p = _profiles[_idx];
   const card = document.getElementById('swipe-card');
-  card.classList.add('animating');
   if (type === 'favourite') {
-    card.style.transform = 'translateX(120%) rotate(15deg)';
-    card.style.opacity = '0';
+    card.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
+    card.style.transform  = 'translateX(120%) rotate(12deg)';
+    card.style.opacity    = '0';
     await fetch('/profile/' + p.id + '/favourite', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ set: true }),
     });
+    setTimeout(() => { _idx++; showCard(_idx); }, 340);
   } else if (type === 'archive') {
-    card.style.transform = 'translateX(-120%) rotate(-15deg)';
-    card.style.opacity = '0';
+    card.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
+    card.style.transform  = 'translateX(-120%) rotate(-12deg)';
+    card.style.opacity    = '0';
     await fetch('/profile/' + p.id + '/archive', { method: 'POST' });
+    setTimeout(() => { _idx++; showCard(_idx); }, 340);
+  } else {
+    _idx++; showCard(_idx);
   }
-  // skip: geen API call, gewoon volgende
-  setTimeout(() => { _idx++; showCard(_idx); }, type === 'skip' ? 0 : 320);
 }
 
-// Touch swipe
+// Swipe detectie op de foto
 (function() {
+  const area = document.getElementById('swipe-photo-area');
   const card = document.getElementById('swipe-card');
   const THRESHOLD = 80;
   let sx = 0, sy = 0, dx = 0, active = false;
 
-  card.addEventListener('touchstart', e => {
+  area.addEventListener('touchstart', e => {
     sx = e.changedTouches[0].clientX;
     sy = e.changedTouches[0].clientY;
     dx = 0; active = false;
-    card.classList.remove('animating');
+    card.style.transition = 'none';
   }, { passive: true });
 
-  card.addEventListener('touchmove', e => {
+  area.addEventListener('touchmove', e => {
     dx = e.changedTouches[0].clientX - sx;
     const dy = e.changedTouches[0].clientY - sy;
     if (!active && Math.abs(dy) > Math.abs(dx)) return;
     active = true;
+    card.classList.add('swiping');
     const rot = dx * 0.04;
     card.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
-    card.style.transition = 'none';
     const pct = Math.min(Math.abs(dx) / THRESHOLD, 1);
-    if (dx > 0) {
-      document.getElementById('overlay-right').style.opacity = pct;
-      document.getElementById('overlay-left').style.opacity  = 0;
-    } else {
-      document.getElementById('overlay-left').style.opacity  = pct;
-      document.getElementById('overlay-right').style.opacity = 0;
-    }
+    document.getElementById(dx > 0 ? 'overlay-right' : 'overlay-left').style.opacity = pct;
+    document.getElementById(dx > 0 ? 'overlay-left' : 'overlay-right').style.opacity = 0;
   }, { passive: true });
 
-  card.addEventListener('touchend', () => {
+  area.addEventListener('touchend', () => {
     if (!active) return;
+    active = false;
+    card.classList.remove('swiping');
     if (Math.abs(dx) >= THRESHOLD) {
       doAction(dx > 0 ? 'favourite' : 'archive');
     } else {
-      card.classList.add('animating');
-      card.style.transform = '';
-      card.style.opacity = '1';
+      card.style.transition = 'transform 0.2s ease';
+      card.style.transform  = '';
       resetOverlays();
     }
-    active = false;
   }, { passive: true });
 
-  // Mouse drag (desktop)
+  // Muisdrag (desktop)
   let dragging = false, msx = 0;
-  card.addEventListener('mousedown', e => { dragging = true; msx = e.clientX; dx = 0; card.classList.remove('animating'); });
+  area.addEventListener('mousedown', e => {
+    dragging = true; msx = e.clientX; dx = 0;
+    card.style.transition = 'none';
+  });
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
     dx = e.clientX - msx;
     card.style.transform = `translateX(${dx}px) rotate(${dx*0.04}deg)`;
-    card.style.transition = 'none';
     const pct = Math.min(Math.abs(dx) / THRESHOLD, 1);
     document.getElementById(dx > 0 ? 'overlay-right' : 'overlay-left').style.opacity = pct;
     document.getElementById(dx > 0 ? 'overlay-left' : 'overlay-right').style.opacity = 0;
@@ -191,7 +240,7 @@ async function doAction(type) {
     if (!dragging) return;
     dragging = false;
     if (Math.abs(dx) >= THRESHOLD) doAction(dx > 0 ? 'favourite' : 'archive');
-    else { card.classList.add('animating'); card.style.transform = ''; card.style.opacity = '1'; resetOverlays(); }
+    else { card.style.transition = 'transform 0.2s ease'; card.style.transform = ''; resetOverlays(); }
   });
 })();
 

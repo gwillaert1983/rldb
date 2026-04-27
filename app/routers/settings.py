@@ -88,8 +88,8 @@ async def settings_page(
                         else settings.SCRAPE_INTERVAL_MINUTES)
     scrape_stats = _compute_scrape_stats(db, current_interval)
 
-    # Distinct nationaliteiten en services voor de filtergroepen-UI
-    _nats, _svcs = set(), set()
+    # Distinct nationaliteiten, talen en services voor de filtergroepen-UI
+    _nats, _svcs, _langs = set(), set(), set()
     for (ed,) in db.query(Profile.extra_data).filter(Profile.extra_data.isnot(None)).limit(3000).all():
         try:
             d = _json.loads(ed)
@@ -99,6 +99,11 @@ async def settings_page(
                 for items in svcs.values():
                     if isinstance(items, list):
                         _svcs.update(i.strip() for i in items if i.strip())
+            langs = d.get("languages", "")
+            if isinstance(langs, list):
+                _langs.update(l.strip() for l in langs if l.strip())
+            elif isinstance(langs, str) and langs.strip():
+                _langs.update(l.strip() for l in langs.split(",") if l.strip())
         except Exception:
             pass
 
@@ -114,6 +119,7 @@ async def settings_page(
             "filter_groups_json": (s.filter_groups or "[]") if s else "[]",
             "distinct_nationalities": sorted(_nats),
             "distinct_services": sorted(_svcs),
+            "distinct_languages": sorted(_langs),
         },
     )
 
