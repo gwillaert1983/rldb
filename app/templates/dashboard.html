@@ -621,16 +621,20 @@ let _searchTimer = null;
 
 function _currentParams(page) {
   const fd = new FormData(document.getElementById('filter-form'));
-  const p = new URLSearchParams(fd);
-  p.set('page', page);
-  // Unchecked checkboxes aren't in FormData — explicitly set to 0
-  ['with_phone', 'with_photo'].forEach(k => {
-    if (!p.has(k)) p.set(k, '0');
-  });
-  // Remove empty-string params — int fields with no value cause 422 on the backend
-  for (const [k, v] of [...p.entries()]) {
-    if (v === '') p.delete(k);
+  const p = new URLSearchParams();
+  // Multiselect names — read from state, not hidden inputs (browser compat)
+  const msNames = new Set(['nationality', 'language', 'service']);
+  for (const [k, v] of fd.entries()) {
+    if (v !== '' && !msNames.has(k)) p.append(k, v);
   }
+  // Multiselect values from JS state
+  ['nationality', 'language', 'service'].forEach(name => {
+    const ms = window[`_ms_${name}`];
+    if (ms) ms.selected.forEach(v => { if (v) p.append(name, v); });
+  });
+  p.set('page', page);
+  if (!p.has('with_phone')) p.set('with_phone', '0');
+  if (!p.has('with_photo')) p.set('with_photo', '0');
   return p;
 }
 
@@ -880,7 +884,7 @@ const FILTER_KEY = 'dashboardFilters';
 document.getElementById('filter-form').addEventListener('submit', () => {
   const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
   const chk = id => { const el = document.getElementById(id); return el && el.checked ? '1' : ''; };
-  const msGet = n => { const ms = window[`_ms_${n}`]; return ms ? ms.selected : []; };
+  const msGet = n => { const ms = window[`_ms_${n}`]; return (ms ? ms.selected : []).filter(Boolean); };
   localStorage.setItem(FILTER_KEY, JSON.stringify({
     q: val('inp-q'),
     gender: val('inp-gender'),
