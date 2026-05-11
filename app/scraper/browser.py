@@ -6,7 +6,6 @@ from playwright.async_api import BrowserContext, Page, async_playwright
 logger = logging.getLogger(__name__)
 
 AGE_GATE_SELECTORS = [
-    "a[href*='adult=1']",
     "a:has-text('Akkoord')",
     "button:has-text('Akkoord')",
     "button:has-text('I am 18')",

@@ -11,6 +11,14 @@ BASE = "https://www.redlights.be"
 
 
 async def collect_profile_urls(context: BrowserContext) -> list[str]:
+    # Pre-set agecheck cookie so the JS age gate overlay is hidden on first load
+    await context.add_cookies([{
+        "name": "agecheck",
+        "value": "1",
+        "domain": ".redlights.be",
+        "path": "/",
+    }])
+
     page = await context.new_page()
     urls: list[str] = []
     page_num = 1
