@@ -3,10 +3,68 @@ import logging
 from playwright.async_api import BrowserContext
 
 from app.scraper.browser import handle_age_gate, make_absolute
+from app.scraper.listing import _find_next_page, _is_profile_url
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://www.redlights.be"
+
+
+async def collect_profile_urls_from_city(
+    context: BrowserContext,
+    city_url: str,
+    max_pages: int = 5,
+) -> list[str]:
+    """
+    Collect profile URLs from a redlights.be city listing page (regio/{province}/{city}.html).
+    Works the same as collect_profile_urls in listing.py but starts from a city URL.
+    """
+    await context.add_cookies([{
+        "name": "agecheck",
+        "value": "1",
+        "domain": ".redlights.be",
+        "path": "/",
+    }])
+
+    page = await context.new_page()
+    urls: list[str] = []
+    current_url = city_url
+    page_num = 1
+
+    try:
+        while current_url:
+            if max_pages and page_num > max_pages:
+                logger.info("Pagina-limiet bereikt (%d) voor %s", max_pages, city_url)
+                break
+
+            logger.info("Profielen ophalen pagina %d: %s", page_num, current_url)
+            try:
+                await page.goto(current_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as e:
+                logger.error("Fout bij ophalen %s: %s", current_url, e)
+                break
+
+            if page_num == 1:
+                await handle_age_gate(page)
+
+            links = await page.locator("a[href*='/profiel/']").all()
+            found = 0
+            for link in links:
+                href = await link.get_attribute("href")
+                if href and _is_profile_url(href):
+                    urls.append(make_absolute(href, BASE))
+                    found += 1
+
+            logger.info("  %d profielen gevonden op pagina %d", found, page_num)
+
+            current_url = await _find_next_page(page, page_num)
+            page_num += 1
+    finally:
+        await page.close()
+
+    deduped = list(dict.fromkeys(urls))
+    logger.info("Totaal unieke profiel-URLs voor %s: %d", city_url, len(deduped))
+    return deduped
 
 
 async def collect_ad_urls_from_listing(

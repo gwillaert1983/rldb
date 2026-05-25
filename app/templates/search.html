@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Zoekopdrachten — RLDB{% endblock %}
 
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.min.css" rel="stylesheet">
+<style>
+  .ts-wrapper .ts-control {
+    background: #1f2937; border-color: #374151; color: #fff;
+    border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem;
+    box-shadow: none;
+  }
+  .ts-wrapper.focus .ts-control { border-color: #3b82f6; }
+  .ts-dropdown {
+    background: #1f2937; border-color: #374151; color: #fff;
+    border-radius: 0.5rem; margin-top: 2px; font-size: 0.875rem;
+  }
+  .ts-dropdown .ts-option { padding: 0.4rem 0.75rem; color: #d1d5db; }
+  .ts-dropdown .ts-option:hover, .ts-dropdown .ts-option.active { background: #374151; color: #fff; }
+  .ts-dropdown .ts-optgroup-header { color: #6b7280; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.5rem 0.75rem 0.2rem; }
+  .ts-dropdown-content { max-height: 240px; }
+  .ts-wrapper .ts-control input { color: #fff !important; }
+  .ts-wrapper .ts-control input::placeholder { color: #6b7280; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-6xl mx-auto space-y-6">
 
@@ -27,19 +49,18 @@
       <!-- Centrumstad -->
       <div>
         <label class="block text-xs text-gray-400 mb-1">Centrumstad</label>
-        <select id="ns-city"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-          <option value="">— kies stad —</option>
-          {% set current_prov = "" %}
+        <select id="ns-city" placeholder="— zoek stad —">
+          <option value="">— zoek stad —</option>
+          {% set ns = namespace(current_prov="") %}
           {% for city in city_options %}
-            {% if city.province_name != current_prov %}
-              {% if current_prov != "" %}</optgroup>{% endif %}
+            {% if city.province_name != ns.current_prov %}
+              {% if ns.current_prov != "" %}</optgroup>{% endif %}
               <optgroup label="{{ city.province_name }}">
-              {% set current_prov = city.province_name %}
+              {% set ns.current_prov = city.province_name %}
             {% endif %}
             <option value="{{ city.slug }}">{{ city.name }}</option>
           {% endfor %}
-          </optgroup>
+          {% if ns.current_prov != "" %}</optgroup>{% endif %}
         </select>
       </div>
 
@@ -273,8 +294,12 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
 <script>
 (function () {
+  // Searchable city dropdown
+  new TomSelect('#ns-city', { maxOptions: null });
+
   // Toggle new-search form
   document.getElementById('new-search-toggle').addEventListener('click', () => {
     document.getElementById('new-search-form').classList.remove('hidden');

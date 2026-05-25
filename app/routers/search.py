@@ -19,7 +19,6 @@ CATEGORIES = [
     {"slug": "prive-ontvangst", "label": "Privé-ontvangst"},
     {"slug": "escort",          "label": "Escort"},
     {"slug": "massage",         "label": "Massage"},
-    {"slug": "shemale",         "label": "Shemale"},
 ]
 
 INTERVAL_OPTIONS = [
