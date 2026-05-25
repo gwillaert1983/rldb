@@ -98,6 +98,26 @@ class ScrapeRun(Base):
     profiles_skipped   = Column(Integer, default=0)
     photos_downloaded  = Column(Integer, default=0)
     error_message      = Column(Text)
+    run_type           = Column(String(32), default="full")   # "full" or "search"
+    search_config      = Column(Text, nullable=True)          # JSON: {cities, provinces, categories}
+    saved_search_id    = Column(String(36), nullable=True)    # FK to saved_searches (soft ref)
+
+
+class SavedSearch(Base):
+    __tablename__ = "saved_searches"
+
+    id                      = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name                    = Column(String(255), nullable=False)
+    center_city             = Column(String(255), nullable=False)  # city slug (bv. "antwerpen")
+    radius_km               = Column(Integer, default=50)
+    categories              = Column(Text, nullable=True)          # JSON list: ["escort", ...]
+    age_min                 = Column(Integer, nullable=True)
+    age_max                 = Column(Integer, nullable=True)
+    schedule_interval_hours = Column(Integer, default=24)
+    max_pages_per_city      = Column(Integer, default=5)
+    is_active               = Column(Boolean, default=True)
+    last_run_at             = Column(DateTime, nullable=True)
+    created_at              = Column(DateTime, default=datetime.utcnow)
 
 
 class Advertisement(Base):

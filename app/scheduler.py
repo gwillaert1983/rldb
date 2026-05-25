@@ -16,6 +16,7 @@ _scheduler = BackgroundScheduler(timezone="UTC")
 
 _stop_event = threading.Event()
 _active_thread: threading.Thread | None = None
+_active_thread_type: str = "full"  # "full" or "search"
 
 
 def start_scheduler():
@@ -37,6 +38,12 @@ def start_scheduler():
         id="scrape_job",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        _check_saved_searches_job,
+        trigger=IntervalTrigger(minutes=30),
+        id="saved_search_job",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info("Scheduler gestart. Interval: %d minuten", interval)
 
@@ -56,17 +63,44 @@ def scrape_is_running() -> bool:
 
 def start_scrape_thread() -> bool:
     """Start a scrape in a background thread. Returns False if already running."""
-    global _active_thread
+    global _active_thread, _active_thread_type
     if scrape_is_running():
         return False
     _stop_event.clear()
+    _active_thread_type = "full"
     _active_thread = threading.Thread(target=run_scrape_job, daemon=True)
     _active_thread.start()
     return True
 
 
+def start_search_thread(
+    city_urls: list[str],
+    categories: list[str],
+    max_pages: int = 5,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    saved_search_id: str | None = None,
+) -> bool:
+    """Start a targeted city/category search in a background thread. Returns False if already running."""
+    global _active_thread, _active_thread_type
+    if scrape_is_running():
+        return False
+    _stop_event.clear()
+    _active_thread_type = "search"
+    _active_thread = threading.Thread(
+        target=lambda: run_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id),
+        daemon=True,
+    )
+    _active_thread.start()
+    return True
+
+
+def get_active_thread_type() -> str:
+    return _active_thread_type
+
+
 def stop_scrape():
-    """Signal the running scrape to stop after the current profile."""
+    """Signal the running scrape or search to stop after the current profile."""
     _stop_event.set()
 
 
@@ -81,6 +115,17 @@ def get_next_run_time() -> str | None:
 
 def run_scrape_job():
     asyncio.run(_async_scrape_job())
+
+
+def run_search_job(
+    city_urls: list[str],
+    categories: list[str],
+    max_pages: int = 5,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    saved_search_id: str | None = None,
+):
+    asyncio.run(_async_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id))
 
 
 def _scheduled_scrape_job():
@@ -330,6 +375,245 @@ async def _async_scrape_job():
         run.status = ScrapeStatus.failed
         run.error_message = str(e)
         logger.exception("Scrape job gefaald")
+    finally:
+        run.finished_at = datetime.utcnow()
+        try:
+            db.commit()
+        except Exception:
+            pass
+        db.close()
+
+
+def _check_saved_searches_job():
+    """Every 30 min: run the highest-priority due saved search (oldest last_run_at)."""
+    from datetime import timedelta
+    from app.models import SavedSearch
+    from app.geo import cities_within_radius
+
+    if scrape_is_running():
+        return
+
+    db = SessionLocal()
+    try:
+        searches = (
+            db.query(SavedSearch)
+            .filter_by(is_active=True)
+            .order_by(SavedSearch.last_run_at.asc())
+            .all()
+        )
+        now = datetime.utcnow()
+        for s in searches:
+            due = (
+                s.last_run_at is None
+                or (now - s.last_run_at) >= timedelta(hours=s.schedule_interval_hours or 24)
+            )
+            if not due:
+                continue
+            city_urls = cities_within_radius(s.center_city, s.radius_km or 50)
+            if not city_urls:
+                logger.warning("Geen steden gevonden voor saved search '%s' (stad: %s)", s.name, s.center_city)
+                continue
+            cats = _j.loads(s.categories or "[]")
+            started = start_search_thread(
+                city_urls=city_urls,
+                categories=cats,
+                max_pages=s.max_pages_per_city or 5,
+                age_min=s.age_min,
+                age_max=s.age_max,
+                saved_search_id=s.id,
+            )
+            if started:
+                logger.info("Automatische zoekrun gestart voor saved search '%s'", s.name)
+            break  # één run per scheduler-tick
+    except Exception as e:
+        logger.exception("Fout in _check_saved_searches_job: %s", e)
+    finally:
+        db.close()
+
+
+async def _async_search_job(
+    city_urls: list[str],
+    categories: list[str],
+    max_pages: int,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    saved_search_id: str | None = None,
+):
+    from app.models import Advertisement, SavedSearch, ScrapeRun, ScrapeStatus
+    from app.scraper import upsert_profile
+    from app.scraper.browser import managed_browser
+    from app.scraper.profile import scrape_ad_page, scrape_profile
+    from app.scraper.search import collect_ad_urls_from_listing
+    from app.scraper import _parse_date  # reuse date parser
+
+    db = SessionLocal()
+    run = ScrapeRun(
+        started_at=datetime.utcnow(),
+        status=ScrapeStatus.running,
+        run_type="search",
+        search_config=_json.dumps({
+            "city_urls": city_urls,
+            "categories": categories,
+            "max_pages": max_pages,
+            "age_min": age_min,
+            "age_max": age_max,
+        }),
+        saved_search_id=saved_search_id,
+    )
+    db.add(run)
+    db.commit()
+    run_id = run.id
+    logger.info(
+        "Zoekrun gestart (id=%s) voor %d steden, categorieën: %s, leeftijd: %s–%s",
+        run_id, len(city_urls), categories, age_min, age_max,
+    )
+
+    def _refresh_db(current_db, error: Exception):
+        if "stream not found" not in str(error).lower() and "stream" not in str(error).lower():
+            return current_db
+        logger.warning("Turso stream verlopen — sessie opnieuw aanmaken")
+        try:
+            current_db.close()
+        except Exception:
+            pass
+        return SessionLocal()
+
+    try:
+        async with managed_browser() as context:
+            # 1. Collect all ad URLs from city listing pages
+            all_ad_urls: list[str] = []
+            for city_url in city_urls:
+                if _stop_event.is_set():
+                    break
+                try:
+                    found = await collect_ad_urls_from_listing(
+                        context, city_url, categories=categories or None, max_pages=max_pages
+                    )
+                    all_ad_urls.extend(found)
+                    logger.info("  %d URLs gevonden op %s", len(found), city_url)
+                except Exception as e:
+                    logger.warning("Fout bij verzamelen ads van %s: %s", city_url, e)
+
+            all_ad_urls = list(dict.fromkeys(all_ad_urls))
+            run.profiles_found = len(all_ad_urls)
+            db.commit()
+            logger.info("Totaal %d unieke advertentie-URLs gevonden", len(all_ad_urls))
+
+            # 2. Process each ad URL
+            for ad_url in all_ad_urls:
+                if _stop_event.is_set():
+                    run.status = ScrapeStatus.stopped
+                    logger.info("Zoekrun gestopt door gebruiker")
+                    break
+
+                run.profiles_processed = (run.profiles_processed or 0) + 1
+
+                try:
+                    # Scrape ad page first — lightweight, gives us published_at for dedup
+                    ad_data = await scrape_ad_page(context, ad_url)
+                    profile_url = ad_data.get("profile_url", "")
+                    if not profile_url:
+                        logger.debug("Geen profiel-URL op %s — overgeslagen", ad_url)
+                        run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                        continue
+
+                    # Smart dedup: skip if ad exists with same published_at (not renewed)
+                    new_pub = _parse_date(ad_data.get("published_at_str", ""))
+                    try:
+                        existing_ad = db.query(Advertisement).filter_by(source_url=ad_url).first()
+                        if existing_ad:
+                            if new_pub and existing_ad.published_at:
+                                if new_pub.date() == existing_ad.published_at.date():
+                                    run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                    continue  # same publication date → not renewed
+                            elif existing_ad.published_at is None and new_pub is None:
+                                # Both unknown → use recency fallback (< 6h)
+                                age_h = (datetime.utcnow() - existing_ad.last_seen).total_seconds() / 3600
+                                if age_h < 6:
+                                    run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                    continue
+                    except Exception as e:
+                        db = _refresh_db(db, e)
+                        try:
+                            run = db.query(ScrapeRun).filter_by(id=run_id).first()
+                        except Exception:
+                            pass
+                        continue
+
+                    # Scrape full profile
+                    data = await scrape_profile(context, profile_url)
+
+                    # Age filter (only if configured)
+                    if age_min is not None or age_max is not None:
+                        age_val = _to_int((data.extra_data or {}).get("age"))
+                        if age_val is not None:
+                            if age_min is not None and age_val < age_min:
+                                run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                continue
+                            if age_max is not None and age_val > age_max:
+                                run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                continue
+
+                    # Ensure the trigger ad is in the profile's ad list
+                    if ad_url not in data.ad_urls:
+                        data.ad_urls.append(ad_url)
+                    if ad_url not in data.ad_details:
+                        data.ad_details[ad_url] = ad_data
+
+                    # Scrape other new ad pages on this profile
+                    if data.ad_urls:
+                        known_ad_urls = {
+                            row[0]
+                            for row in db.query(Advertisement.source_url)
+                                .filter(Advertisement.source_url.in_(data.ad_urls))
+                                .all()
+                        }
+                        for other_url in data.ad_urls:
+                            if other_url != ad_url and other_url not in known_ad_urls and other_url not in data.ad_details:
+                                try:
+                                    data.ad_details[other_url] = await scrape_ad_page(context, other_url)
+                                except Exception as ae:
+                                    logger.warning("Bijkomende ad scrapen mislukt %s: %s", other_url, ae)
+
+                    is_new, is_changed = await upsert_profile(db, data, run)
+                    if is_new:
+                        run.profiles_new = (run.profiles_new or 0) + 1
+                    elif is_changed:
+                        run.profiles_updated = (run.profiles_updated or 0) + 1
+                    db.commit()
+
+                except Exception as e:
+                    logger.warning("Fout bij verwerken %s: %s", ad_url, e)
+                    db = _refresh_db(db, e)
+                    if db is not None:
+                        try:
+                            run = db.query(ScrapeRun).filter_by(id=run_id).first()
+                        except Exception:
+                            pass
+                    continue
+
+        if run.status == ScrapeStatus.running:
+            run.status = ScrapeStatus.completed
+        logger.info(
+            "Zoekrun klaar: %d ads gevonden, %d nieuw, %d geüpdated, %d overgeslagen",
+            run.profiles_found, run.profiles_new or 0,
+            run.profiles_updated or 0, run.profiles_skipped or 0,
+        )
+
+        # Update last_run_at on the SavedSearch
+        if saved_search_id:
+            try:
+                ss = db.query(SavedSearch).filter_by(id=saved_search_id).first()
+                if ss:
+                    ss.last_run_at = datetime.utcnow()
+                    db.commit()
+            except Exception as e:
+                logger.warning("last_run_at update mislukt: %s", e)
+
+    except Exception as e:
+        run.status = ScrapeStatus.failed
+        run.error_message = str(e)
+        logger.exception("Zoekrun gefaald")
     finally:
         run.finished_at = datetime.utcnow()
         try:

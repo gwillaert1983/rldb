@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}Zoekopdrachten — RLDB{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+
+  <div class="flex items-center justify-between">
+    <h1 class="text-lg font-semibold text-white">Automatische zoekopdrachten</h1>
+    <button id="new-search-toggle"
+      class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition">
+      + Nieuwe zoekopdracht
+    </button>
+  </div>
+
+  <!-- Nieuwe zoekopdracht aanmaken -->
+  <div id="new-search-form" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-gray-300 mb-4">Nieuwe zoekopdracht configureren</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+      <!-- Naam -->
+      <div class="lg:col-span-1">
+        <label class="block text-xs text-gray-400 mb-1">Naam</label>
+        <input type="text" id="ns-name" placeholder="bv. Escort Antwerpen"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+      </div>
+
+      <!-- Centrumstad -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Centrumstad</label>
+        <select id="ns-city"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          <option value="">— kies stad —</option>
+          {% set current_prov = "" %}
+          {% for city in city_options %}
+            {% if city.province_name != current_prov %}
+              {% if current_prov != "" %}</optgroup>{% endif %}
+              <optgroup label="{{ city.province_name }}">
+              {% set current_prov = city.province_name %}
+            {% endif %}
+            <option value="{{ city.slug }}">{{ city.name }}</option>
+          {% endfor %}
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Straal -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Straal</label>
+        <select id="ns-radius"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          <option value="10">10 km</option>
+          <option value="25">25 km</option>
+          <option value="50" selected>50 km</option>
+          <option value="75">75 km</option>
+          <option value="100">100 km</option>
+        </select>
+      </div>
+
+      <!-- Categorieën -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1.5">Categorieën <span class="text-gray-600">(leeg = alle)</span></label>
+        <div class="flex flex-wrap gap-2">
+          {% for cat in categories %}
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" class="ns-cat rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0" value="{{ cat.slug }}">
+            <span class="text-sm text-gray-300">{{ cat.label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Leeftijdsbereik -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Leeftijdsbereik <span class="text-gray-600">(optioneel)</span></label>
+        <div class="flex items-center gap-2">
+          <input type="number" id="ns-age-min" placeholder="min" min="18" max="99"
+            class="w-20 bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          <span class="text-gray-500 text-sm">–</span>
+          <input type="number" id="ns-age-max" placeholder="max" min="18" max="99"
+            class="w-20 bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          <span class="text-xs text-gray-600">jaar</span>
+        </div>
+      </div>
+
+      <!-- Interval -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Uitvoeringsinterval</label>
+        <select id="ns-interval"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          {% for opt in interval_options %}
+          <option value="{{ opt.hours }}" {% if opt.hours == 24 %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Max pagina's -->
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Max pagina's per stad</label>
+        <input type="number" id="ns-max-pages" value="5" min="1" max="50"
+          class="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+        <span class="text-xs text-gray-600 ml-1">≈20 ads/pag.</span>
+      </div>
+    </div>
+
+    <div class="flex gap-3 items-center mt-4">
+      <button id="ns-save-btn" type="button"
+        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition">
+        Opslaan
+      </button>
+      <button id="new-search-cancel" type="button"
+        class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition">
+        Annuleren
+      </button>
+      <span id="ns-msg" class="text-xs text-gray-500"></span>
+    </div>
+  </div>
+
+  <!-- Opgeslagen zoekopdrachten -->
+  <div class="bg-gray-900 border border-gray-800 rounded-xl">
+    <div class="px-5 py-3 border-b border-gray-800">
+      <h2 class="text-sm font-semibold text-gray-300">Opgeslagen zoekopdrachten</h2>
+    </div>
+    {% if saved_searches %}
+    <div id="saved-searches-list" class="divide-y divide-gray-800">
+      {% for ss in saved_searches %}
+      <div class="px-5 py-4 flex items-center gap-4" id="ss-row-{{ ss.id }}">
+        <!-- Actief/inactief toggle -->
+        <button onclick="toggleSearch('{{ ss.id }}')"
+          class="shrink-0 w-9 h-5 rounded-full transition-colors relative
+            {% if ss.is_active %}bg-blue-600{% else %}bg-gray-700{% endif %}"
+          title="{% if ss.is_active %}Actief — klik om uit te zetten{% else %}Inactief — klik om te activeren{% endif %}">
+          <span class="absolute top-0.5 {% if ss.is_active %}right-0.5{% else %}left-0.5{% endif %} w-4 h-4 bg-white rounded-full transition-all shadow"></span>
+        </button>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-0.5">
+            <span class="text-sm font-medium text-white">{{ ss.name }}</span>
+            {% if ss.categories %}
+            {% for cat in ss.categories %}
+            <span class="px-1.5 py-0.5 bg-gray-800 text-gray-400 text-xs rounded">{{ cat }}</span>
+            {% endfor %}
+            {% else %}
+            <span class="px-1.5 py-0.5 bg-gray-800 text-gray-500 text-xs rounded">alle categorieën</span>
+            {% endif %}
+          </div>
+          <div class="text-xs text-gray-500 flex flex-wrap gap-3">
+            <span>📍 {{ ss.center_city_name }} · {{ ss.radius_km }} km straal</span>
+            {% if ss.age_min or ss.age_max %}
+            <span>👤 {{ ss.age_min or '?' }}–{{ ss.age_max or '?' }} jaar</span>
+            {% endif %}
+            <span>🔁 {{ ss.schedule_interval_hours }}u interval</span>
+            <span>📄 max {{ ss.max_pages_per_city }} pag./stad</span>
+          </div>
+        </div>
+
+        <!-- Timing -->
+        <div class="hidden md:block text-right text-xs text-gray-500 shrink-0 w-44">
+          <div>Laatste run: <span class="text-gray-400">{{ ss.last_run_at or '—' }}</span></div>
+          <div>Volgende: <span class="{% if ss.is_active %}text-blue-400{% else %}text-gray-600{% endif %}">{{ ss.next_run_at or '—' }}</span></div>
+        </div>
+
+        <!-- Acties -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="runSearchNow('{{ ss.id }}')"
+            class="px-3 py-1.5 bg-gray-800 hover:bg-blue-600 text-gray-300 hover:text-white text-xs rounded-lg transition"
+            title="Nu uitvoeren">
+            ▶ Run nu
+          </button>
+          <button onclick="deleteSearch('{{ ss.id }}')"
+            class="px-2.5 py-1.5 bg-gray-800 hover:bg-red-900/60 text-gray-500 hover:text-red-400 text-xs rounded-lg transition"
+            title="Verwijderen">
+            ✕
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p id="no-searches-msg" class="px-5 py-8 text-sm text-gray-600 text-center">
+      Nog geen zoekopdrachten aangemaakt. Klik op "+ Nieuwe zoekopdracht" om te beginnen.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- Live voortgang -->
+  <div id="progress-card" class="bg-gray-900 border border-gray-800 rounded-xl p-5 {% if not is_search_running %}hidden{% endif %}">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-gray-300 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+        Zoekopdracht actief
+      </h2>
+      <button id="stop-btn" onclick="stopSearch()"
+        class="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-xs rounded-lg transition">
+        Stop
+      </button>
+    </div>
+    <div class="mb-2">
+      <div class="flex justify-between text-xs text-gray-500 mb-1">
+        <span>Voortgang</span>
+        <span id="prog-text">0 / 0</span>
+      </div>
+      <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div id="prog-bar" class="h-full bg-blue-500 transition-all duration-500" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="grid grid-cols-4 gap-2 text-center text-xs mt-3">
+      <div class="bg-gray-800 rounded-lg p-2">
+        <div id="stat-found" class="text-base font-bold text-gray-300">0</div>
+        <div class="text-gray-500">Gevonden</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-2">
+        <div id="stat-new" class="text-base font-bold text-green-400">0</div>
+        <div class="text-gray-500">Nieuw</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-2">
+        <div id="stat-updated" class="text-base font-bold text-blue-400">0</div>
+        <div class="text-gray-500">Geüpdated</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-2">
+        <div id="stat-skipped" class="text-base font-bold text-gray-500">0</div>
+        <div class="text-gray-500">Overgeslagen</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recente runs -->
+  <div class="bg-gray-900 border border-gray-800 rounded-xl">
+    <div class="px-5 py-3 border-b border-gray-800">
+      <h2 class="text-sm font-semibold text-gray-300">Recente zoekruns</h2>
+    </div>
+    {% if recent_runs %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-xs text-gray-500 border-b border-gray-800">
+          <th class="text-left px-5 py-2.5 font-medium">Gestart</th>
+          <th class="text-left px-4 py-2.5 font-medium">Zoekopdracht</th>
+          <th class="text-left px-4 py-2.5 font-medium">Status</th>
+          <th class="text-right px-4 py-2.5 font-medium">Gevonden</th>
+          <th class="text-right px-4 py-2.5 font-medium">Nieuw</th>
+          <th class="text-right px-4 py-2.5 font-medium">Overgesl.</th>
+          <th class="text-right px-5 py-2.5 font-medium">Duur</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_runs %}
+        <tr class="border-b border-gray-800/60 hover:bg-gray-800/30">
+          <td class="px-5 py-2.5 text-gray-400 text-xs">{{ r.started_at }}</td>
+          <td class="px-4 py-2.5 text-gray-300 text-xs max-w-40 truncate">
+            {{ r.saved_search_name or '—' }}
+          </td>
+          <td class="px-4 py-2.5">
+            <span class="px-1.5 py-0.5 rounded text-xs font-medium
+              {% if r.status == 'completed' %}bg-green-900/50 text-green-400
+              {% elif r.status == 'running' %}bg-blue-900/50 text-blue-400
+              {% elif r.status == 'stopped' %}bg-yellow-900/50 text-yellow-400
+              {% else %}bg-red-900/50 text-red-400{% endif %}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td class="px-4 py-2.5 text-right text-gray-300">{{ r.profiles_found }}</td>
+          <td class="px-4 py-2.5 text-right text-green-400">{{ r.profiles_new }}</td>
+          <td class="px-4 py-2.5 text-right text-gray-500">{{ r.profiles_skipped }}</td>
+          <td class="px-5 py-2.5 text-right text-gray-500">{{ r.duration or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="px-5 py-8 text-sm text-gray-600 text-center">Nog geen zoekruns uitgevoerd.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+(function () {
+  // Toggle new-search form
+  document.getElementById('new-search-toggle').addEventListener('click', () => {
+    document.getElementById('new-search-form').classList.remove('hidden');
+    document.getElementById('new-search-toggle').classList.add('hidden');
+  });
+  document.getElementById('new-search-cancel').addEventListener('click', () => {
+    document.getElementById('new-search-form').classList.add('hidden');
+    document.getElementById('new-search-toggle').classList.remove('hidden');
+  });
+
+  // Save new search
+  document.getElementById('ns-save-btn').addEventListener('click', async () => {
+    const name       = document.getElementById('ns-name').value.trim();
+    const centerCity = document.getElementById('ns-city').value;
+    const radius     = document.getElementById('ns-radius').value;
+    const ageMin     = document.getElementById('ns-age-min').value;
+    const ageMax     = document.getElementById('ns-age-max').value;
+    const interval   = document.getElementById('ns-interval').value;
+    const maxPages   = document.getElementById('ns-max-pages').value;
+    const cats       = Array.from(document.querySelectorAll('.ns-cat:checked')).map(c => c.value);
+    const msg        = document.getElementById('ns-msg');
+
+    if (!name) { msg.textContent = 'Naam is verplicht.'; msg.className = 'text-xs text-red-400'; return; }
+    if (!centerCity) { msg.textContent = 'Kies een centrumstad.'; msg.className = 'text-xs text-red-400'; return; }
+
+    const body = new URLSearchParams({ name, center_city: centerCity, radius_km: radius,
+      schedule_interval_hours: interval, max_pages_per_city: maxPages });
+    if (ageMin) body.set('age_min', ageMin);
+    if (ageMax) body.set('age_max', ageMax);
+    cats.forEach(c => body.append('categories', c));
+
+    const resp = await fetch('/zoeken/opslaan', { method: 'POST', body });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      window.location.reload();
+    } else {
+      msg.textContent = data.message || 'Fout bij opslaan.';
+      msg.className = 'text-xs text-red-400';
+    }
+  });
+
+  // Toggle active/inactive
+  window.toggleSearch = async (id) => {
+    const resp = await fetch(`/zoeken/${id}/toggle`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.status === 'ok') window.location.reload();
+  };
+
+  // Delete saved search
+  window.deleteSearch = async (id) => {
+    if (!confirm('Zoekopdracht verwijderen?')) return;
+    const resp = await fetch(`/zoeken/${id}`, { method: 'DELETE' });
+    if (resp.ok) window.location.reload();
+  };
+
+  // Run now
+  window.runSearchNow = async (id) => {
+    const resp = await fetch(`/zoeken/${id}/start`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.status === 'started') {
+      document.getElementById('progress-card').classList.remove('hidden');
+      startPolling();
+    } else if (data.status === 'already_running') {
+      alert('Er loopt al een zoekopdracht. Wacht tot die klaar is.');
+    } else {
+      alert(data.message || 'Fout bij starten.');
+    }
+  };
+
+  // Stop
+  window.stopSearch = async () => {
+    await fetch('/zoeken/stop', { method: 'POST' });
+  };
+
+  // Polling
+  let pollInterval = null;
+
+  function startPolling() {
+    if (pollInterval) return;
+    pollInterval = setInterval(poll, 3000);
+    poll();
+  }
+
+  async function poll() {
+    try {
+      const resp = await fetch('/zoeken/status');
+      const d    = await resp.json();
+      const r    = d.last_run;
+      const card = document.getElementById('progress-card');
+
+      if (d.is_running) {
+        card.classList.remove('hidden');
+        if (r) {
+          const found = r.profiles_found || 0;
+          const proc  = r.profiles_processed || 0;
+          const pct   = found > 0 ? Math.min(100, Math.round(proc / found * 100)) : 0;
+          document.getElementById('prog-text').textContent    = `${proc} / ${found}`;
+          document.getElementById('prog-bar').style.width     = pct + '%';
+          document.getElementById('stat-found').textContent   = found;
+          document.getElementById('stat-new').textContent     = r.profiles_new || 0;
+          document.getElementById('stat-updated').textContent = r.profiles_updated || 0;
+          document.getElementById('stat-skipped').textContent = r.profiles_skipped || 0;
+        }
+      } else {
+        if (r && r.status !== 'running') {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          // Refresh page to show updated last_run_at etc.
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      }
+    } catch (e) {
+      console.error('Poll fout:', e);
+    }
+  }
+
+  // Auto-start polling if already running
+  {% if is_search_running %}startPolling();{% endif %}
+})();
+</script>
+{% endblock %}

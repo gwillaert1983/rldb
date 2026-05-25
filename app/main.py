@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.database import init_db
-from app.routers import auth, dashboard, settings, status
+from app.routers import auth, dashboard, search, settings, status
 from app.scheduler import shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -27,3 +27,4 @@ app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(status.router)
 app.include_router(settings.router)
+app.include_router(search.router)

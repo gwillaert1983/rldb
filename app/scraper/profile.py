@@ -264,7 +264,7 @@ async def _find_all_ad_urls(page) -> list[str]:
 
 
 async def scrape_ad_page(context: BrowserContext, ad_url: str) -> dict:
-    """Visit an ad page; return {location, description, published_at_str}."""
+    """Visit an ad page; return {location, description, published_at_str, profile_url}."""
     page = await context.new_page()
     try:
         await page.goto(ad_url, wait_until="domcontentloaded", timeout=15000)
@@ -303,7 +303,17 @@ async def scrape_ad_page(context: BrowserContext, ad_url: str) -> dict:
                     if (m2) published_at_str = m2.getAttribute('content') || '';
                 }
 
-                return { location, description, published_at_str };
+                // Find profile link on ad page (back-link to /profiel/slug/)
+                const profLinks = Array.from(document.querySelectorAll('a[href*="/profiel/"]'))
+                    .map(a => a.href)
+                    .filter(h => {
+                        const path = h.split('?')[0].replace(/\\/$/, '');
+                        const parts = path.split('/').filter(Boolean);
+                        return parts.length >= 2 && parts[parts.length - 2] === 'profiel';
+                    });
+                const profile_url = profLinks.length ? profLinks[0] : '';
+
+                return { location, description, published_at_str, profile_url };
             }
         """)
         return result or {}

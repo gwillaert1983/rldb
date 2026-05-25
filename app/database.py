@@ -82,6 +82,23 @@ def init_db():
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN window_12_18 INTEGER NOT NULL DEFAULT 1"))
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN window_18_24 INTEGER NOT NULL DEFAULT 1"))
     _migrate(text("ALTER TABLE scraper_settings ADD COLUMN filter_groups TEXT"))
+    _migrate(text("ALTER TABLE scrape_runs ADD COLUMN run_type TEXT DEFAULT 'full'"))
+    _migrate(text("ALTER TABLE scrape_runs ADD COLUMN search_config TEXT"))
+    _migrate(text("ALTER TABLE scrape_runs ADD COLUMN saved_search_id TEXT"))
+    _migrate(text("""CREATE TABLE IF NOT EXISTS saved_searches (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        center_city TEXT NOT NULL,
+        radius_km INTEGER DEFAULT 50,
+        categories TEXT,
+        age_min INTEGER,
+        age_max INTEGER,
+        schedule_interval_hours INTEGER DEFAULT 24,
+        max_pages_per_city INTEGER DEFAULT 5,
+        is_active INTEGER DEFAULT 1,
+        last_run_at DATETIME,
+        created_at DATETIME
+    )"""))
     _migrate(text("""INSERT INTO visits (profile_id, visited_at, note)
         SELECT id, visited_at, visited_note FROM profiles
         WHERE is_visited = 1 AND visited_at IS NOT NULL
