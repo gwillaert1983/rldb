@@ -108,6 +108,12 @@ async def collect_ad_urls_from_listing(
             if page_num == 1:
                 await handle_age_gate(page)
 
+            # Wait for JavaScript to render the article listing cards
+            try:
+                await page.wait_for_selector('.article-item a[href$=".html"]', timeout=10000)
+            except Exception:
+                pass  # Page may have no results; continue anyway
+
             # Collect all .html ad links on this page
             found_urls = await page.evaluate("""
                 () => Array.from(document.querySelectorAll('a[href$=".html"]'))

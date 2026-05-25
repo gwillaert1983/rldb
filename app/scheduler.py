@@ -443,7 +443,8 @@ async def _async_search_job(
     from app.scraper import upsert_profile
     from app.scraper.browser import managed_browser
     from app.scraper.profile import scrape_ad_page, scrape_profile
-    from app.scraper.search import collect_profile_urls_from_city, _matches_category
+    from app.scraper.search import collect_ad_urls_from_listing
+    from app.scraper import _parse_date
 
     db = SessionLocal()
     run = ScrapeRun(
@@ -479,25 +480,27 @@ async def _async_search_job(
 
     try:
         async with managed_browser() as context:
-            # 1. Collect profile URLs from all city listing pages
-            all_profile_urls: list[str] = []
+            # 1. Collect ad URLs from all city listing pages (JS-rendered, waits for .article-item links)
+            all_ad_urls: list[str] = []
             for city_url in city_urls:
                 if _stop_event.is_set():
                     break
                 try:
-                    found = await collect_profile_urls_from_city(context, city_url, max_pages=max_pages)
-                    all_profile_urls.extend(found)
-                    logger.info("  %d profiel-URLs gevonden op %s", len(found), city_url)
+                    found = await collect_ad_urls_from_listing(
+                        context, city_url, categories=categories or None, max_pages=max_pages
+                    )
+                    all_ad_urls.extend(found)
+                    logger.info("  %d advertentie-URLs gevonden op %s", len(found), city_url)
                 except Exception as e:
-                    logger.warning("Fout bij verzamelen profielen van %s: %s", city_url, e)
+                    logger.warning("Fout bij verzamelen ads van %s: %s", city_url, e)
 
-            all_profile_urls = list(dict.fromkeys(all_profile_urls))
-            run.profiles_found = len(all_profile_urls)
+            all_ad_urls = list(dict.fromkeys(all_ad_urls))
+            run.profiles_found = len(all_ad_urls)
             db.commit()
-            logger.info("Totaal %d unieke profiel-URLs gevonden", len(all_profile_urls))
+            logger.info("Totaal %d unieke advertentie-URLs gevonden", len(all_ad_urls))
 
-            # 2. Process each profile
-            for profile_url in all_profile_urls:
+            # 2. Process each ad URL
+            for ad_url in all_ad_urls:
                 if _stop_event.is_set():
                     run.status = ScrapeStatus.stopped
                     logger.info("Zoekrun gestopt door gebruiker")
@@ -506,15 +509,40 @@ async def _async_search_job(
                 run.profiles_processed = (run.profiles_processed or 0) + 1
 
                 try:
+                    # Scrape ad page — gives us profile_url + published_at for dedup
+                    ad_data = await scrape_ad_page(context, ad_url)
+                    profile_url = ad_data.get("profile_url", "")
+                    if not profile_url:
+                        logger.debug("Geen profiel-URL op %s — overgeslagen", ad_url)
+                        run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                        continue
+
+                    # Smart dedup: skip if ad exists with same published_at (not renewed)
+                    new_pub = _parse_date(ad_data.get("published_at_str", ""))
+                    try:
+                        existing_ad = db.query(Advertisement).filter_by(source_url=ad_url).first()
+                        if existing_ad:
+                            if new_pub and existing_ad.published_at:
+                                if new_pub.date() == existing_ad.published_at.date():
+                                    run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                    continue
+                            elif existing_ad.published_at is None and new_pub is None:
+                                age_h = (datetime.utcnow() - existing_ad.last_seen).total_seconds() / 3600
+                                if age_h < 6:
+                                    run.profiles_skipped = (run.profiles_skipped or 0) + 1
+                                    continue
+                    except Exception as e:
+                        db = _refresh_db(db, e)
+                        try:
+                            run = db.query(ScrapeRun).filter_by(id=run_id).first()
+                        except Exception:
+                            pass
+                        continue
+
+                    # Scrape full profile
                     data = await scrape_profile(context, profile_url)
 
-                    # Category filter: check if any ad URL matches a requested category
-                    if categories:
-                        if not any(_matches_category(u, categories) for u in data.ad_urls):
-                            run.profiles_skipped = (run.profiles_skipped or 0) + 1
-                            continue
-
-                    # Age filter (only if configured)
+                    # Age filter
                     if age_min is not None or age_max is not None:
                         age_val = _to_int((data.extra_data or {}).get("age"))
                         if age_val is not None:
@@ -525,7 +553,13 @@ async def _async_search_job(
                                 run.profiles_skipped = (run.profiles_skipped or 0) + 1
                                 continue
 
-                    # Scrape new ad pages (to get location, description, published_at)
+                    # Ensure the trigger ad is linked to this profile
+                    if ad_url not in data.ad_urls:
+                        data.ad_urls.append(ad_url)
+                    if ad_url not in data.ad_details:
+                        data.ad_details[ad_url] = ad_data
+
+                    # Scrape other new ad pages on this profile
                     if data.ad_urls:
                         known_ad_urls = {
                             row[0]
@@ -533,12 +567,12 @@ async def _async_search_job(
                                 .filter(Advertisement.source_url.in_(data.ad_urls))
                                 .all()
                         }
-                        for ad_url in data.ad_urls:
-                            if ad_url not in known_ad_urls and ad_url not in data.ad_details:
+                        for other_url in data.ad_urls:
+                            if other_url != ad_url and other_url not in known_ad_urls and other_url not in data.ad_details:
                                 try:
-                                    data.ad_details[ad_url] = await scrape_ad_page(context, ad_url)
+                                    data.ad_details[other_url] = await scrape_ad_page(context, other_url)
                                 except Exception as ae:
-                                    logger.warning("Ad page scrapen mislukt voor %s: %s", ad_url, ae)
+                                    logger.warning("Bijkomende ad scrapen mislukt %s: %s", other_url, ae)
 
                     is_new, is_changed = await upsert_profile(db, data, run)
                     if is_new:
@@ -548,7 +582,7 @@ async def _async_search_job(
                     db.commit()
 
                 except Exception as e:
-                    logger.warning("Fout bij verwerken %s: %s", profile_url, e)
+                    logger.warning("Fout bij verwerken %s: %s", ad_url, e)
                     db = _refresh_db(db, e)
                     if db is not None:
                         try:
@@ -560,7 +594,7 @@ async def _async_search_job(
         if run.status == ScrapeStatus.running:
             run.status = ScrapeStatus.completed
         logger.info(
-            "Zoekrun klaar: %d profielen gevonden, %d nieuw, %d geüpdated, %d overgeslagen",
+            "Zoekrun klaar: %d ads gevonden, %d nieuw, %d geüpdated, %d overgeslagen",
             run.profiles_found, run.profiles_new or 0,
             run.profiles_updated or 0, run.profiles_skipped or 0,
         )
