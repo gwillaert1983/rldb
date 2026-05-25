@@ -2,12 +2,26 @@
 {% block title %}{% if archive_view %}Archief{% elif contacted_view %}Gecontacteerd{% elif visited_view %}Bezocht{% elif favourite_view %}Favorieten{% else %}Profielen{% endif %} — RLDB{% endblock %}
 {% block content %}
 
-<div class="flex gap-5 items-start">
+<!-- Mobiele filterknop (verborgen op desktop) -->
+<div class="lg:hidden mb-3 flex items-center gap-2">
+  <button id="filter-toggle" type="button"
+          class="flex items-center gap-2 px-3 py-1.5 bg-gray-900 border border-gray-800 rounded-lg text-sm text-gray-400 hover:text-white transition">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+    </svg>
+    Filters
+    {% if filters_active %}
+    <span class="text-xs bg-blue-600/30 text-blue-400 border border-blue-600/40 px-1.5 py-0.5 rounded-full leading-none">actief</span>
+    {% endif %}
+  </button>
+</div>
+
+<div class="flex flex-col gap-3 lg:flex-row lg:gap-5 lg:items-start">
 
   <!-- ═══════════════════════════════════════
        SIDEBAR — zoek + filters
   ══════════════════════════════════════════ -->
-  <aside class="w-52 shrink-0 sticky top-5">
+  <aside id="filter-sidebar" class="hidden lg:block w-full lg:w-52 lg:shrink-0 lg:sticky lg:top-5">
     <form id="filter-form" method="get" action="{% if archive_view %}/archived{% elif contacted_view %}/gecontacteerd{% elif visited_view %}/bezocht{% elif favourite_view %}/favorieten{% else %}/{% endif %}">
       <input type="hidden" name="page" value="1">
       {% if archive_view %}
@@ -32,10 +46,10 @@
       </div>
 
       <!-- Filter card -->
-      <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2.5">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 grid grid-cols-2 gap-2 lg:block lg:space-y-2.5">
 
         <!-- Header -->
-        <div class="flex items-center justify-between pb-1 border-b border-gray-800">
+        <div class="col-span-2 flex items-center justify-between pb-1 border-b border-gray-800">
           <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filters</span>
           {% if filters_active %}
           <span class="text-xs bg-blue-600/30 text-blue-400 border border-blue-600/40 px-1.5 py-0.5 rounded-full leading-none">actief</span>
@@ -80,7 +94,7 @@
         </div>
 
         <!-- Leeftijd range slider -->
-        <div>
+        <div class="col-span-2">
           <label class="block text-xs text-gray-500 mb-1">Leeftijd <span id="lbl-age" class="text-gray-400 font-mono text-xs"></span></label>
           <div class="relative h-6 flex items-center mt-1">
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
@@ -94,7 +108,7 @@
         </div>
 
         <!-- Gewicht range slider -->
-        <div>
+        <div class="col-span-2">
           <label class="block text-xs text-gray-500 mb-1">Gewicht (kg) <span id="lbl-wt" class="text-gray-400 font-mono text-xs"></span></label>
           <div class="relative h-6 flex items-center mt-1">
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
@@ -108,7 +122,7 @@
         </div>
 
         <!-- Lengte range slider -->
-        <div>
+        <div class="col-span-2">
           <label class="block text-xs text-gray-500 mb-1">Lengte (cm) <span id="lbl-ht" class="text-gray-400 font-mono text-xs"></span></label>
           <div class="relative h-6 flex items-center mt-1">
             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-gray-700 pointer-events-none">
@@ -193,7 +207,7 @@
         {% endif %}
 
         <!-- Checkboxes -->
-        <div class="space-y-1.5 pt-0.5">
+        <div class="col-span-2 space-y-1.5 pt-0.5">
           <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
             <input type="checkbox" name="with_phone" value="1" id="inp-phone"
                    {{ 'checked' if with_phone }}
@@ -217,7 +231,7 @@
         </div>
 
         <!-- Knoppen -->
-        <div class="space-y-1.5 pt-1">
+        <div class="col-span-2 space-y-1.5 pt-1">
           <button type="submit"
                   class="w-full bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-xs font-medium transition">
             Toepassen
@@ -860,6 +874,17 @@ if (!hasUrlFilters && !hasActive) {
   } catch(e) {}
 }
 {% endif %}
+
+// Mobiele filter toggle
+(function () {
+  const btn = document.getElementById('filter-toggle');
+  const sidebar = document.getElementById('filter-sidebar');
+  if (btn && sidebar) {
+    btn.addEventListener('click', function () {
+      sidebar.classList.toggle('hidden');
+    });
+  }
+})();
 </script>
 
 {% endblock %}
