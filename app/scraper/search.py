@@ -140,6 +140,59 @@ async def collect_ad_urls_from_listing(
     return deduped
 
 
+async def collect_ad_urls_from_search(
+    context: BrowserContext,
+    search_query: str,
+    categories: list[str] | None = None,
+) -> list[str]:
+    """
+    Collect ad URLs from the redlights.be search page (/zoeken/?q=...).
+    Content is server-rendered; no pagination on the search page.
+    """
+    import urllib.parse
+
+    await context.add_cookies([{
+        "name": "agecheck",
+        "value": "1",
+        "domain": ".redlights.be",
+        "path": "/",
+    }])
+
+    url = f"{BASE}/zoeken/?q={urllib.parse.quote(search_query)}"
+    page = await context.new_page()
+    try:
+        logger.info("Zoeken op site: %s", url)
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            logger.error("Fout bij ophalen zoekpagina %s: %s", url, e)
+            return []
+
+        await handle_age_gate(page)
+
+        try:
+            await page.wait_for_selector('.article-item a[href$=".html"]', timeout=8000)
+        except Exception:
+            pass
+
+        found_urls = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('a[href$=".html"]'))
+                .map(a => a.href)
+                .filter(h => h.includes('redlights.be') && !h.includes('/regio/'))
+        """)
+
+        urls = []
+        for href in (found_urls or []):
+            if _is_ad_url(href) and _matches_category(href, categories):
+                urls.append(href)
+
+        deduped = list(dict.fromkeys(urls))
+        logger.info("  %d advertentie-URLs gevonden via zoeken op '%s'", len(deduped), search_query)
+        return deduped
+    finally:
+        await page.close()
+
+
 async def get_province_city_urls(province_slug: str) -> list[str]:
     """
     Fetch city listing URLs for a province by scraping /regio/{province}/.

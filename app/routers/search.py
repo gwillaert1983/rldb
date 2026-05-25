@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.dependencies import get_db, require_login
-from app.geo import all_city_options, cities_within_radius
+from app.geo import all_city_options
 from app.models import SavedSearch, ScrapeRun, ScrapeStatus
 from app.templates_config import templates
 
@@ -262,10 +262,6 @@ async def run_saved_search_now(
     if not ss:
         return JSONResponse({"status": "not_found"}, status_code=404)
 
-    city_urls = cities_within_radius(ss.center_city, ss.radius_km or 50)
-    if not city_urls:
-        return JSONResponse({"status": "error", "message": "Geen steden gevonden voor deze zoekopdracht"}, status_code=400)
-
     cats = []
     if ss.categories:
         try:
@@ -274,12 +270,13 @@ async def run_saved_search_now(
             pass
 
     started = start_search_thread(
-        city_urls=city_urls,
+        city_urls=[],
         categories=cats,
         max_pages=ss.max_pages_per_city or 5,
         age_min=ss.age_min,
         age_max=ss.age_max,
         saved_search_id=ss.id,
+        search_query=ss.center_city,
     )
     return JSONResponse({"status": "started" if started else "already_running"})
 

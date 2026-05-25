@@ -80,6 +80,7 @@ def start_search_thread(
     age_min: int | None = None,
     age_max: int | None = None,
     saved_search_id: str | None = None,
+    search_query: str | None = None,
 ) -> bool:
     """Start a targeted city/category search in a background thread. Returns False if already running."""
     global _active_thread, _active_thread_type
@@ -88,7 +89,7 @@ def start_search_thread(
     _stop_event.clear()
     _active_thread_type = "search"
     _active_thread = threading.Thread(
-        target=lambda: run_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id),
+        target=lambda: run_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id, search_query),
         daemon=True,
     )
     _active_thread.start()
@@ -124,8 +125,9 @@ def run_search_job(
     age_min: int | None = None,
     age_max: int | None = None,
     saved_search_id: str | None = None,
+    search_query: str | None = None,
 ):
-    asyncio.run(_async_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id))
+    asyncio.run(_async_search_job(city_urls, categories, max_pages, age_min, age_max, saved_search_id, search_query))
 
 
 def _scheduled_scrape_job():
@@ -388,7 +390,6 @@ def _check_saved_searches_job():
     """Every 30 min: run the highest-priority due saved search (oldest last_run_at)."""
     from datetime import timedelta
     from app.models import SavedSearch
-    from app.geo import cities_within_radius
 
     if scrape_is_running():
         return
@@ -409,18 +410,15 @@ def _check_saved_searches_job():
             )
             if not due:
                 continue
-            city_urls = cities_within_radius(s.center_city, s.radius_km or 50)
-            if not city_urls:
-                logger.warning("Geen steden gevonden voor saved search '%s' (stad: %s)", s.name, s.center_city)
-                continue
             cats = _json.loads(s.categories or "[]")
             started = start_search_thread(
-                city_urls=city_urls,
+                city_urls=[],
                 categories=cats,
                 max_pages=s.max_pages_per_city or 5,
                 age_min=s.age_min,
                 age_max=s.age_max,
                 saved_search_id=s.id,
+                search_query=s.center_city,
             )
             if started:
                 logger.info("Automatische zoekrun gestart voor saved search '%s'", s.name)
@@ -438,12 +436,13 @@ async def _async_search_job(
     age_min: int | None = None,
     age_max: int | None = None,
     saved_search_id: str | None = None,
+    search_query: str | None = None,
 ):
     from app.models import Advertisement, SavedSearch, ScrapeRun, ScrapeStatus
     from app.scraper import upsert_profile
     from app.scraper.browser import managed_browser
     from app.scraper.profile import scrape_ad_page, scrape_profile
-    from app.scraper.search import collect_ad_urls_from_listing
+    from app.scraper.search import collect_ad_urls_from_listing, collect_ad_urls_from_search
     from app.scraper import _parse_date
 
     db = SessionLocal()
@@ -480,21 +479,26 @@ async def _async_search_job(
 
     try:
         async with managed_browser() as context:
-            # 1. Collect ad URLs from all city listing pages (JS-rendered, waits for .article-item links)
+            # 1. Collect ad URLs — via site search (saved searches) or city listing pages (manual)
             all_ad_urls: list[str] = []
-            for city_url in city_urls:
-                if _stop_event.is_set():
-                    break
-                try:
-                    found = await collect_ad_urls_from_listing(
-                        context, city_url, categories=categories or None, max_pages=max_pages
-                    )
-                    all_ad_urls.extend(found)
-                    logger.info("  %d advertentie-URLs gevonden op %s", len(found), city_url)
-                except Exception as e:
-                    logger.warning("Fout bij verzamelen ads van %s: %s", city_url, e)
+            if search_query:
+                all_ad_urls = await collect_ad_urls_from_search(
+                    context, search_query, categories=categories or None
+                )
+            else:
+                for city_url in city_urls:
+                    if _stop_event.is_set():
+                        break
+                    try:
+                        found = await collect_ad_urls_from_listing(
+                            context, city_url, categories=categories or None, max_pages=max_pages
+                        )
+                        all_ad_urls.extend(found)
+                        logger.info("  %d advertentie-URLs gevonden op %s", len(found), city_url)
+                    except Exception as e:
+                        logger.warning("Fout bij verzamelen ads van %s: %s", city_url, e)
+                all_ad_urls = list(dict.fromkeys(all_ad_urls))
 
-            all_ad_urls = list(dict.fromkeys(all_ad_urls))
             run.profiles_found = len(all_ad_urls)
             db.commit()
             logger.info("Totaal %d unieke advertentie-URLs gevonden", len(all_ad_urls))
