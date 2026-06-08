@@ -103,6 +103,19 @@ def init_db():
         SELECT id, visited_at, visited_note FROM profiles
         WHERE is_visited = 1 AND visited_at IS NOT NULL
           AND id NOT IN (SELECT DISTINCT profile_id FROM visits)"""))
+    # Indexes voor betere query performance
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_active_scraped ON profiles (is_active, last_scraped DESC)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_is_archived ON profiles (is_archived)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_is_contacted ON profiles (is_contacted)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_is_visited ON profiles (is_visited)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_is_favourite ON profiles (is_favourite)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_first_seen ON profiles (first_seen)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_last_changed ON profiles (last_changed)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_location ON profiles (location)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_profiles_display_name ON profiles (display_name)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_ads_category ON advertisements (category)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_ads_is_active ON advertisements (is_active)"))
+    _migrate(text("CREATE INDEX IF NOT EXISTS idx_ads_location ON advertisements (location)"))
     with engine.connect() as conn:
         conn.execute(text(
             "UPDATE scrape_runs SET status='failed', "

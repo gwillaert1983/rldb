@@ -6,8 +6,8 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import cast, exists, func, or_, Integer as SAInteger
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case, cast, exists, func, or_, Integer as SAInteger
 
 from app.dependencies import get_db, require_login
 from app.models import Advertisement, Profile, ScrapeRun, Visit
@@ -192,36 +192,58 @@ def _visit_total(v) -> float:
 
 
 def _compute_visit_stats(db) -> dict:
-    visits = db.query(Visit).all()
-    if not visits:
-        return {}
-
-    def _dt(v):
-        dt = v.visited_at
-        return pytz.utc.localize(dt) if dt.tzinfo is None else dt
-
     now = datetime.now(_TZ)
     week_start  = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     year_start  = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    def total(cutoff):
-        return sum(_visit_total(v) for v in visits if _dt(v) >= cutoff)
+    # DB stores naive UTC; convert Brussels period starts to naive UTC for comparison
+    week_utc  = week_start.astimezone(pytz.utc).replace(tzinfo=None)
+    month_utc = month_start.astimezone(pytz.utc).replace(tzinfo=None)
+    year_utc  = year_start.astimezone(pytz.utc).replace(tzinfo=None)
 
-    by_month: dict = {}
-    for v in visits:
-        ldt = _dt(v).astimezone(_TZ)
-        key = ldt.strftime("%Y-%m")
-        by_month.setdefault(key, {"label": ldt.strftime("%B %Y"), "count": 0, "total": 0.0})
-        by_month[key]["count"] += 1
-        by_month[key]["total"] += _visit_total(v)
+    cost = (
+        func.coalesce(Visit.amount, 0)
+        + func.coalesce(Visit.hotel_cost, 0)
+        + func.coalesce(Visit.extra_cost, 0)
+    )
+    row = db.query(
+        func.count(Visit.id),
+        func.sum(cost),
+        func.sum(case((Visit.visited_at >= week_utc,  cost), else_=0)),
+        func.sum(case((Visit.visited_at >= month_utc, cost), else_=0)),
+        func.sum(case((Visit.visited_at >= year_utc,  cost), else_=0)),
+    ).first()
+
+    if not row or not row[0]:
+        return {}
+
+    total_count, all_time, this_week, this_month, this_year = row
+
+    month_key_expr = func.strftime("%Y-%m", Visit.visited_at)
+    month_rows = (
+        db.query(
+            month_key_expr.label("month_key"),
+            func.count(Visit.id).label("count"),
+            func.sum(cost).label("total"),
+        )
+        .group_by(month_key_expr)
+        .order_by(month_key_expr.desc())
+        .limit(12)
+        .all()
+    )
+    by_month = []
+    for month_key, count, mtotal in month_rows:
+        if month_key:
+            dt = datetime.strptime(month_key, "%Y-%m")
+            by_month.append({"label": dt.strftime("%B %Y"), "count": count, "total": mtotal or 0.0})
 
     return {
-        "this_week":  total(week_start),
-        "this_month": total(month_start),
-        "this_year":  total(year_start),
-        "all_time":   sum(_visit_total(v) for v in visits),
-        "by_month":   [by_month[k] for k in sorted(by_month.keys(), reverse=True)][:12],
+        "this_week":  this_week  or 0.0,
+        "this_month": this_month or 0.0,
+        "this_year":  this_year  or 0.0,
+        "all_time":   all_time   or 0.0,
+        "by_month":   by_month,
     }
 
 
@@ -470,7 +492,8 @@ async def profile_list(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
@@ -549,7 +572,8 @@ async def archived_list(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
@@ -623,7 +647,8 @@ async def contacted_list(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
@@ -699,7 +724,8 @@ async def visited_list(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
@@ -774,7 +800,8 @@ async def favourite_list(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
@@ -839,10 +866,15 @@ async def duplicates_page(
         .limit(200)
         .all()
     )
-    phone_groups = []
-    for phone, cnt in phone_counts:
-        profiles = db.query(Profile).filter(Profile.phone == phone).order_by(Profile.first_seen).all()
-        phone_groups.append({"key": phone, "count": cnt, "profiles": profiles})
+    phones = [phone for phone, _ in phone_counts]
+    if phones:
+        _phone_profiles = db.query(Profile).filter(Profile.phone.in_(phones)).order_by(Profile.first_seen).all()
+        _phone_map: dict = {}
+        for p in _phone_profiles:
+            _phone_map.setdefault(p.phone, []).append(p)
+    else:
+        _phone_map = {}
+    phone_groups = [{"key": ph, "count": cnt, "profiles": _phone_map.get(ph, [])} for ph, cnt in phone_counts]
 
     name_counts = (
         db.query(Profile.display_name, Profile.location, func.count(Profile.id).label("cnt"))
@@ -853,15 +885,18 @@ async def duplicates_page(
         .limit(200)
         .all()
     )
-    name_groups = []
-    for name, location, cnt in name_counts:
-        profiles = (
-            db.query(Profile)
-            .filter(Profile.display_name == name, Profile.location == location)
-            .order_by(Profile.first_seen)
-            .all()
-        )
-        name_groups.append({"key": f"{name} — {location or '?'}", "count": cnt, "profiles": profiles})
+    names = [name for name, _, _ in name_counts]
+    if names:
+        _name_profiles = db.query(Profile).filter(Profile.display_name.in_(names)).order_by(Profile.first_seen).all()
+        _name_map: dict = {}
+        for p in _name_profiles:
+            _name_map.setdefault((p.display_name, p.location), []).append(p)
+    else:
+        _name_map = {}
+    name_groups = [
+        {"key": f"{name} — {loc or '?'}", "count": cnt, "profiles": _name_map.get((name, loc), [])}
+        for name, loc, cnt in name_counts
+    ]
 
     return templates.TemplateResponse("duplicates.html", {
         "request": request,
@@ -883,6 +918,7 @@ async def swipe_page(
     profiles = (
         db.query(Profile)
         .filter(Profile.is_active == True, Profile.is_archived != True, Profile.is_favourite != True)
+        .options(selectinload(Profile.photos))
         .order_by(Profile.last_scraped.desc())
         .limit(30)
         .all()
@@ -983,7 +1019,8 @@ async def profiles_more(
     )
     total = query.count()
     profiles = (
-        query.order_by(Profile.last_scraped.desc())
+        query.options(selectinload(Profile.photos))
+        .order_by(Profile.last_scraped.desc())
         .offset((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
